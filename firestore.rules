@@ -1,0 +1,39 @@
+rules_version = '2';
+// Regras de segurança do banco da fazenda.
+// Cole este conteúdo em: Firebase → Firestore Database → Regras → Publicar.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() { return request.auth != null; }
+    function perfilPath() { return /databases/$(database)/documents/usuarios/$(request.auth.uid); }
+    function ativo() { return logado() && exists(perfilPath()) && get(perfilPath()).data.ativo != 'Não'; }
+    function admin() { return ativo() && get(perfilPath()).data.papel == 'admin'; }
+
+    // Marca de "sistema já iniciado": qualquer um lê (só diz se já existe administrador).
+    // Só pode ser criada uma vez, junto com o perfil do primeiro administrador.
+    match /sistema/inicial {
+      allow read: if true;
+      allow create: if logado()
+        && !exists(/databases/$(database)/documents/sistema/inicial)
+        && getAfter(perfilPath()).data.papel == 'admin';
+      allow update, delete: if false;
+    }
+
+    // Perfis de acesso (nome, e-mail, perfil, liberado/bloqueado)
+    match /usuarios/{uid} {
+      allow read: if ativo();
+      allow create: if admin()
+        || (logado() && request.auth.uid == uid
+            && !exists(/databases/$(database)/documents/sistema/inicial)
+            && existsAfter(/databases/$(database)/documents/sistema/inicial)
+            && request.resource.data.papel == 'admin');
+      allow update, delete: if admin();
+    }
+
+    // Todos os dados da fazenda: quem está liberado lê; só administrador grava.
+    match /{colecao}/{id} {
+      allow read: if ativo() && colecao != 'usuarios' && colecao != 'sistema';
+      allow write: if admin() && colecao != 'usuarios' && colecao != 'sistema';
+    }
+  }
+}
