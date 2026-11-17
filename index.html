@@ -169,6 +169,27 @@ dialog.wide{width:min(980px,calc(100vw - 24px))}
 .chk{display:flex;gap:8px;align-items:center;font-weight:700;font-size:.9rem}
 .chk input{width:18px;height:18px}
 .grid-dia{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+/* leitor QR do packing */
+.qr-main{gap:14px}
+.qr-main .nf-opts input,.qr-main .nf-opts select{padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:.88rem;width:100%;min-width:0;box-sizing:border-box;color:var(--ink)}
+.qr-in-wrap{display:grid;gap:6px;border:2px dashed var(--line);border-radius:12px;padding:14px;cursor:text;background:var(--bg)}
+.qr-in-wrap:focus-within{border:2px solid var(--grape);background:var(--grape-soft)}
+.qr-in-wrap .lb{font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.qr-in-wrap .lb .on{display:none;color:var(--grape)} .qr-in-wrap:focus-within .lb .on{display:inline} .qr-in-wrap:focus-within .lb .off{display:none}
+#qrIn{font-size:1.3rem;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);width:100%;box-sizing:border-box;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+#qrIn:focus{outline:none;border-color:var(--grape)}
+.qr-feed{border-radius:12px;padding:16px 18px;min-height:96px;display:grid;align-content:center;gap:4px;background:var(--sunk)}
+.qr-feed .nm{font-family:var(--display);font-size:clamp(1.5rem,5vw,2.3rem);font-weight:700;line-height:1.1;overflow-wrap:anywhere}
+.qr-feed.ok{background:var(--leaf-soft)} .qr-feed.ok .nm{color:var(--leaf)}
+.qr-feed.bad{background:var(--bad-soft)} .qr-feed.bad .nm{color:var(--bad)}
+.qr-feed.warn{background:var(--warn-soft)} .qr-feed.warn .nm{color:var(--warn)}
+@media (prefers-reduced-motion:no-preference){.qr-feed.flash{animation:qrf .35s ease}@keyframes qrf{from{transform:scale(.985)}to{transform:none}}}
+.qr-big{display:grid;justify-items:center;gap:10px;text-align:center}
+.qr-big svg{max-width:100%;height:auto;border-radius:8px}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.9rem;overflow-wrap:anywhere}
+.qr-cam{border-radius:12px;overflow:hidden;background:#000;position:relative}
+.qr-cam video{display:block;width:100%;max-height:55vh;object-fit:cover}
+.qr-cam::after{content:"";position:absolute;inset:18% 22%;border:3px solid rgba(255,255,255,.85);border-radius:14px;pointer-events:none}
 </style>
 </head>
 <body>
@@ -220,7 +241,7 @@ dialog.wide{width:min(980px,calc(100vw - 24px))}
 const COLS=['talhoes','custos','envios','pcs','embalagens','movfin','insumos','producao','pulverizacoes','equipe','notasxml','contas','extrato'];
 const S={acesso:[]}; COLS.forEach(c=>S[c]=[]);
 let CFG={saldoInicial:0,dataSaldo:'',minimos:{},fazenda:'Fazenda Pai & Filho'};
-let db=null, local=false, canWrite=false, dl=null, loaded=new Set();
+let db=null, local=false, canWrite=false, canScan=false, dl=null, loaded=new Set();
 let serverWrite=true, serverAdmin=false, sessao=null, acessoOk=false, falhas=0, bloqueioAte=0;
 let view='inicio', ano=String(new Date().getFullYear()), finTab='pagar', finFiltro='abertas';
 const LKEY='fazenda-romulo-erp-v1';
@@ -392,11 +413,12 @@ const SCH={
   {k:'nome',l:'Nome',req:1},
   {k:'funcao',l:'Função',type:'select',opts:['Embaladeira','Tratorista','Outro'],half:1},
   {k:'ativo',l:'Situação',type:'select',opts:[['Sim','Trabalhando'],['Não','Saiu']],half:1},
+  {k:'codigo',l:'Código do crachá (opcional)',hint:'Ex.: EMB-012. Use só letras, números e traço. Em branco, o sistema cria um código automático para o QR. Se mudar o código, imprima as etiquetas de novo.'},
   {k:'obs',l:'Observação',type:'area'}]},
  acesso:{t:'Usuário',f:[
   {k:'nome',l:'Nome da pessoa',req:1},
   {k:'usuario',l:'E-mail (para entrar)',req:1,lock:1,hint:'A pessoa entra com este e-mail'},
-  {k:'papel',l:'Perfil',type:'select',half:1,opts:[['visualizador','Visualizador: só consulta'],['admin','Administrador: lança e exclui']]},
+  {k:'papel',l:'Perfil',type:'select',half:1,opts:[['visualizador','Visualizador: só consulta'],['leitor','Leitor QR: só registra caixas no packing'],['admin','Administrador: lança e exclui']]},
   {k:'ativo',l:'Acesso',type:'select',half:1,opts:[['Sim','Liberado'],['Não','Bloqueado']]},
   {k:'senha',l:'Senha inicial',type:'pass',half:1,hint:'Só no cadastro. Depois, a pessoa troca pelo link "Esqueci a senha".'},
   {k:'senha2',l:'Repita a senha',type:'pass',half:1}]}
@@ -446,14 +468,14 @@ let raf=0;function schedule(){if(raf)return;raf=requestAnimationFrame(()=>{raf=0
 
 /* ---------- acesso: login por e-mail e senha (Firebase Authentication) ---------- */
 let INICIADO=true;
-const PAPEL={admin:'Administrador',visualizador:'Visualizador'};
+const PAPEL={admin:'Administrador',visualizador:'Visualizador',leitor:'Leitor QR'};
 const admins=()=>S.acesso.filter(a=>a.papel==='admin'&&a.ativo!=='Não');
 const ERRO_AUTH={'auth/invalid-credential':'E-mail ou senha incorretos.','auth/wrong-password':'E-mail ou senha incorretos.','auth/user-not-found':'E-mail ou senha incorretos.','auth/invalid-email':'E-mail inválido.','auth/too-many-requests':'Muitas tentativas. Aguarde alguns minutos ou troque a senha pelo link "Esqueci a senha".','auth/network-request-failed':'Sem conexão com a internet.','auth/email-already-in-use':'Este e-mail já tem cadastro.','auth/weak-password':'A senha precisa ter pelo menos 6 caracteres.'};
 const msgAuth=x=>ERRO_AUTH[x.code]||('Não deu certo ('+(x.code||x.message)+').');
-function aplicarPerfil(){canWrite=!!sessao&&sessao.papel==='admin';
+function aplicarPerfil(){canWrite=!!sessao&&sessao.papel==='admin';canScan=!!sessao&&(sessao.papel==='admin'||sessao.papel==='leitor');
   document.getElementById('who').innerHTML=sessao?`<b>${esc(sessao.nome)}</b><span class="pill ${sessao.papel==='admin'?'grape':''}">${PAPEL[sessao.papel]||''}</span>`:''}
 function entrar(){aplicarPerfil();document.getElementById('gate').hidden=true;document.getElementById('app').hidden=false;render()}
-function sair(){if(dlg.open)dlg.close();document.getElementById('app').hidden=true;document.getElementById('gate').hidden=false;firebase.auth().signOut()}
+function sair(){canScan=false;try{camDesligar()}catch(e){}if(dlg.open)dlg.close();document.getElementById('app').hidden=true;document.getElementById('gate').hidden=false;firebase.auth().signOut()}
 function onAcesso(){if(!sessao)return;const a=S.acesso.find(x=>x.id===sessao.u);if(!a||a.ativo==='Não'){sair();return}
   if(a.papel!==sessao.papel||a.nome!==sessao.nome){sessao.papel=a.papel;sessao.nome=a.nome;aplicarPerfil()}schedule()}
 const LOGO_SRC=document.querySelector('.brand .logo').getAttribute('src');
@@ -540,6 +562,8 @@ frm.addEventListener('submit',async e=>{e.preventDefault();if(!cur)return;
     try{if(await salvarUsuario(o,err))dlg.close()}catch(x){err.textContent=x.code==='permission-denied'?'Só administradores podem gerenciar usuários.':'Não salvou ('+(x.code||'erro')+').'}b.disabled=false;return}
   for(const f of sc.f){if(f.req&&!String(o[f.k]||'').trim()){err.textContent='Preencha: '+f.l;document.getElementById('f_'+f.k).focus();return}
     if(f.type==='num'){const n=pBR(o[f.k]);if(isNaN(n)){err.textContent='Número inválido em: '+f.l;return}o[f.k]=n}}
+  if(cur.col==='equipe'){o.codigo=normCod(o.codigo);
+    if(o.codigo&&S.equipe.some(x=>x.id!==cur.id&&qrBase(x)===o.codigo)){err.textContent='Já existe outra pessoa com o código '+o.codigo+'.';return}}
   if(cur.col==='envios'){o.semana=semanaISO(o.data);const t=S.talhoes.find(t=>t.id===o.talhao);o.variedade=t?.variedade||''}
   if(cur.col==='custos'&&o.pago==='Sim'&&!o.dataPagamento)o.dataPagamento=o.data;
   if(cur.col==='pcs'&&o.status==='Pago'&&!o.dataPagamento)o.dataPagamento=hoje();
@@ -676,12 +700,12 @@ const V={
   const rk=Object.values(g).map(r=>({...r,nd:r.dias.size,media:r.dias.size?r.cx/r.dias.size:0})).sort((a,b)=>b.cx-a.cx);
   const tot=sum(rows,p=>p.caixas),dias=new Set(rows.map(p=>p.data)).size;
   const semEq=!S.equipe.some(e=>e.funcao==='Embaladeira');
-  return`${head('Produção por embaladeira','Quantas caixas cada embaladeira fechou. Serve para acompanhar o rendimento e calcular pagamento por produção.','producao',canWrite&&!semEq?'<button class="btn" data-dia>Lançar produção do dia</button>':'')}
+  return`${head('Produção por embaladeira','Quantas caixas cada embaladeira fechou. Serve para acompanhar o rendimento e calcular pagamento por produção.','producao',(canScan&&!semEq?'<button class="btn" data-go="leitura">Abrir leitor QR</button>':'')+(canWrite&&!semEq?'<button class="btn" data-dia>Lançar produção do dia</button>':''))}
   ${semEq?`<div class="banner">Cadastre as embaladeiras em <b>Cadastros → Equipe</b> para lançar a produção. ${canWrite?'<button class="btn sm" data-new="equipe" data-funcao="Embaladeira">+ Cadastrar embaladeira</button>':''}</div>`:''}
   <div class="kpis">${kpi('Caixas embaladas',int(tot),dias+' dia(s) de packing')}${kpi('Média por dia',dias?int(tot/dias)+' cx':'—','Equipe toda')}${kpi('Embaladeiras',rk.length,'com produção no período')}${kpi('A pagar por produção',brl(sum(rows,p=>(+p.caixas||0)*(+p.valorCaixa||0))))}</div>
   <section class="sec"><h3>Ranking</h3>${table(null,[{h:'#',n:1,v:r=>rk.indexOf(r)+1},{h:'Embaladeira',v:r=>esc(pNome(r.id))},{h:'Dias',n:1,v:r=>r.nd},{h:'Caixas',n:1,v:r=>`<b>${int(r.cx)}</b>`},{h:'Média por dia',n:1,v:r=>int(r.media)},{h:'Participação',n:1,v:r=>tot?num(r.cx/tot*100)+'%':'—'},{h:'A pagar',n:1,v:r=>brl(r.pagar)}],rk)}</section>
-  <section class="sec"><h3>Lançamentos</h3>${table('producao',[{h:'Data',v:r=>fd(r.data)+ex(r)},{h:'Embaladeira',v:r=>esc(pNome(r.pessoa))},{h:'Lote',v:r=>esc(r.talhao?tNome(r.talhao):'—')},{h:'Caixa',v:r=>esc(r.embalagem||'—')},{h:'Caixas',n:1,v:r=>int(r.caixas)},{h:'R$/cx',n:1,v:r=>r.valorCaixa?brl(r.valorCaixa):'—'}],rows,['Total','','','',int(tot),''])}</section>
-  <p class="note">A produção por embaladeira mede o trabalho. Ela não mexe no estoque de caixas: quem baixa as caixas do estoque é o envio da uva.</p>`},
+  <section class="sec"><h3>Lançamentos</h3>${table('producao',[{h:'Data',v:r=>fd(r.data)+ex(r)},{h:'Embaladeira',v:r=>esc(pNome(r.pessoa))},{h:'Lote',v:r=>esc(r.talhao?tNome(r.talhao):'—')},{h:'Caixa',v:r=>esc(r.embalagem||'—')},{h:'Caixas',n:1,v:r=>int(r.caixas)},{h:'R$/cx',n:1,v:r=>r.valorCaixa?brl(r.valorCaixa):'—'},{h:'Origem',v:r=>r.origem==='QR'?`<span class="pill grape">QR${r.estacao?' · '+esc(r.estacao):''}</span>`+(r.primeira?` <span class="note">${esc(r.primeira.slice(0,5))}–${esc((r.ultima||'').slice(0,5))}</span>`:''):'<span class="pill">Manual</span>'}],rows,['Total','','','',int(tot),'',''])}</section>
+  <p class="note">Leituras do QR entram aqui sozinhas, somadas por embaladeira, dia e estação de leitura. A produção por embaladeira mede o trabalho. Ela não mexe no estoque de caixas: quem baixa as caixas do estoque é o envio da uva.</p>`},
 
  pulverizacoes(){const rows=[...S.pulverizacoes].filter(p=>inAno(p.data)).sort(byDate('data'));
   const g={};rows.forEach(p=>{const k=p.tratorista||'';const r=g[k]||(g[k]={id:k,n:0,ha:0,h:0,l:0});r.n++;r.ha+=+p.area||0;r.h+=+p.horas||0;r.l+=+p.calda||0});
@@ -742,8 +766,37 @@ const V={
  talhoes(){const rows=[...S.talhoes].sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));const eq=[...S.equipe].sort((a,b)=>(a.funcao||'').localeCompare(b.funcao||'')||String(a.nome).localeCompare(String(b.nome)));
   return`${head('Lotes e latadas','O cadastro das áreas da fazenda. A área em hectares divide os custos indiretos.','talhoes')}
   ${table('talhoes',[{h:'Nome',v:r=>esc(r.nome)+ex(r)},{h:'Tipo',v:r=>esc(r.tipo||'—')},{h:'Variedade',v:r=>esc(r.variedade||'—')},{h:'Área (ha)',n:1,v:r=>num(r.area)},{h:'Plantas',n:1,v:r=>int(r.plantas)}],rows,['Total','','',num(sum(rows,r=>r.area)),int(sum(rows,r=>r.plantas))])}
-  ${head('Equipe','Embaladeiras e tratoristas que aparecem na produção e nas pulverizações.','equipe')}
-  ${table('equipe',[{h:'Nome',v:r=>esc(r.nome)+ex(r)},{h:'Função',v:r=>`<span class="pill ${r.funcao==='Tratorista'?'grape':''}">${esc(r.funcao||'—')}</span>`},{h:'Situação',v:r=>r.ativo==='Não'?'<span class="pill">Saiu</span>':'<span class="pill ok">Trabalhando</span>'}],eq)}`},
+  ${head('Equipe','Embaladeiras e tratoristas que aparecem na produção e nas pulverizações. Cada embaladeira tem um QR próprio para a leitura das caixas.','equipe',canWrite&&S.equipe.some(e=>e.funcao==='Embaladeira')?'<button class="btn" data-etq>Etiquetas e crachás QR</button>':'')}
+  ${table('equipe',[{h:'Nome',v:r=>esc(r.nome)+ex(r)},{h:'Função',v:r=>`<span class="pill ${r.funcao==='Tratorista'?'grape':''}">${esc(r.funcao||'—')}</span>`},{h:'Situação',v:r=>r.ativo==='Não'?'<span class="pill">Saiu</span>':'<span class="pill ok">Trabalhando</span>'},{h:'Código QR',v:r=>r.funcao==='Embaladeira'?`<span class="mono">${esc(qrBase(r))}</span>`:'—'},{h:'',v:r=>r.funcao==='Embaladeira'?`<button class="btn sm" data-qrver="${esc(r.id)}">Ver QR</button>`:''}],eq)}`},
+
+ leitura(){if(!canScan)return`<section class="verdict"><h2>Leitor QR</h2><p>Só usuários Administrador ou Leitor QR registram caixas. Peça ao administrador para liberar o seu acesso.</p></section>`;
+  const eq=S.equipe.filter(e=>e.funcao==='Embaladeira'&&e.ativo!=='Não');
+  return`<div id="qrShell" class="sec">
+  <section class="panel qr-main">
+   <div class="sec-h"><div><h2>Leitor QR do packing</h2><p>Cada leitura soma uma caixa para a embaladeira dona da etiqueta. Aponte a câmera do celular para a etiqueta ou use um leitor tipo pistola (USB ou Bluetooth).</p></div>
+    <div class="btns">${canWrite?'<button class="btn" data-etq>Etiquetas e crachás QR</button>':''}</div></div>
+   ${eq.length?'':`<div class="banner">Nenhuma embaladeira cadastrada. ${canWrite?'Cadastre em <b>Cadastros → Equipe</b>.':'Peça ao administrador para cadastrar.'}</div>`}
+   <div class="nf-opts">
+    <label>Estação de leitura<input id="lq_nome" value="${esc(LQ.nome)}" placeholder="Ex.: Mesa 1"></label>
+    <label>Data<input type="date" id="lq_data" value="${esc(LQ.data)}"></label>
+    <label>Uva de qual lote<select id="lq_tal">${optsH(talOpts('—'),LQ.talhao)}</select></label>
+    <label>Tipo de caixa<input id="lq_emb" list="lq_embl" value="${esc(LQ.embalagem)}"><datalist id="lq_embl">${itensEmb().map(x=>`<option value="${esc(x)}">`).join('')}</datalist></label>
+    <label>R$ por caixa<input id="lq_v" inputmode="decimal" value="${LQ.valor?String(LQ.valor).replace('.',','):''}"></label>
+   </div>
+   <label class="qr-in-wrap" for="qrIn"><span class="lb"><span class="on">Pronto: aponte o leitor para a etiqueta</span><span class="off">Toque aqui para ativar o leitor</span></span>
+    <input id="qrIn" inputmode="none" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Aguardando leitura…"></label>
+   <div class="btns"><button class="btn pri" type="button" id="lqCamBtn">Ler com a câmera do celular</button><label class="btn" for="qrFoto">Ler por foto</label><input type="file" id="qrFoto" accept="image/*" capture="environment" hidden>
+    <button class="btn" type="button" id="lqTeclado">Digitar código</button><button class="btn" type="button" id="lqUndo">Desfazer última leitura</button></div>
+   <div id="lqCam" class="qr-cam" hidden></div>
+   <div id="lqFeed" class="qr-feed" aria-live="assertive"><span class="nm">Aguardando a primeira leitura</span><span class="note">O nome da embaladeira e o total do dia aparecem aqui a cada caixa.</span></div>
+   <p class="note" id="lqSt">Estação ${esc(LQ.nome||'sem nome')} · leituras salvas na nuvem, somadas com as outras estações.</p>
+  </section>
+  <div class="grid2">
+   <section class="sec"><h3>Caixas do dia por embaladeira</h3><div id="lqRank"></div></section>
+   <section class="sec"><h3>Últimas leituras desta estação</h3><div id="lqHist"></div></section>
+  </div>
+  <p class="note">O leitor precisa estar configurado para enviar Enter no fim da leitura (padrão de fábrica). Leituras repetidas da mesma etiqueta em menos de 1,5 s são ignoradas. Etiquetas numeradas só contam uma vez: a segunda leitura do mesmo número é recusada.</p>
+  </div>`},
 
  ajustes(){const nEx=COLS.reduce((t,c)=>t+S[c].filter(r=>r.exemplo).length,0);
   return`<section class="panel" style="max-width:640px"><h2>Ajustes</h2>
@@ -756,7 +809,7 @@ const V={
   </div>
   ${canWrite?'<div class="btns"><button class="btn pri" id="cfgSave">Salvar ajustes</button><span class="note" id="cfgMsg"></span></div>':''}
   </section>
-  ${sessao?.papel==='admin'?`<section class="sec" style="max-width:880px">${head('Usuários e senhas','Administrador lança, edita e exclui. Visualizador só consulta: não vê os botões de lançar nem consegue abrir os registros para mudar.','acesso')}
+  ${sessao?.papel==='admin'?`<section class="sec" style="max-width:880px">${head('Usuários e senhas','Administrador lança, edita e exclui. Leitor QR só registra caixas no packing. Visualizador só consulta.','acesso')}
    ${table('acesso',[{h:'Nome',v:r=>esc(r.nome)+(r.id===sessao.u?' <span class="pill">você</span>':'')},{h:'E-mail',v:r=>esc(r.email||'—')},{h:'Perfil',v:r=>`<span class="pill ${r.papel==='admin'?'grape':''}">${PAPEL[r.papel]||'—'}</span>`},{h:'Acesso',v:r=>r.ativo==='Não'?'<span class="pill bad">Bloqueado</span>':'<span class="pill ok">Liberado</span>'},{h:'Desde',v:r=>fd((r.criadoEm||'').slice(0,10))}],[...S.acesso].sort((a,b)=>String(a.nome).localeCompare(String(b.nome))))}
    <p class="note">Para trocar a senha de alguém, abra o usuário e use "Enviar link de nova senha". Excluir tira o acesso ao sistema.</p></section>`:''}
   ${nEx&&canWrite?`<section class="panel" style="max-width:640px"><h3>Dados de exemplo</h3><p class="note">Há ${nEx} lançamentos marcados como exemplo, só para mostrar como o sistema funciona. Apague antes de começar a lançar os dados reais.</p><div class="btns"><button class="btn danger" id="delEx">Apagar dados de exemplo</button><span class="note" id="exMsg"></span></div></section>`:''}
@@ -767,27 +820,38 @@ const V={
    <div class="btns">${sessao?.papel==='admin'?`<button class="btn pri" data-backup${dl?'':' disabled'}>Baixar backup completo</button>`:''}${canWrite?'<button class="btn" data-restore>Restaurar de um backup</button>':''}</div></section>`})()}
   <section class="panel" style="max-width:640px"><h3>Como usar</h3><ol class="note" style="margin:0;padding-left:18px;display:grid;gap:6px">
    <li>Cadastre os lotes e latadas com a área.</li><li>A cada carga, lance em <b>Uva enviada</b>.</li><li>Quando a Valexfruit mandar a PC da semana, lance em <b>Prestação de contas</b> e marque "Recebi" quando o dinheiro cair.</li>
-   <li>Toda nota de insumo, mão de obra ou conta vai em <b>Notas e custos</b>.</li><li>Compras de caixas, cumbucas e lona vão em <b>Embalagens</b>.</li><li>O <b>Início</b> mostra o resultado, sem precisar fazer conta.</li></ol></section>`}
+   <li>Toda nota de insumo, mão de obra ou conta vai em <b>Notas e custos</b>.</li><li>Compras de caixas, cumbucas e lona vão em <b>Embalagens</b>.</li><li>No packing, imprima as etiquetas QR de cada embaladeira em <b>Cadastros → Equipe</b> e use o <b>Leitor QR</b> para contar as caixas. Crie usuários com perfil <b>Leitor QR</b> para quem só opera a leitura.</li><li>O <b>Início</b> mostra o resultado, sem precisar fazer conta.</li></ol></section>`}
 };
-const TABS=[['inicio','Início'],['envios','Uva enviada'],['pcs','Prestação de contas'],['custos','Notas e custos'],['embalagens','Estoque'],['producao','Produção'],['pulverizacoes','Pulverização'],['financeiro','Financeiro'],['relatorios','Relatórios'],['talhoes','Cadastros'],['ajustes','Ajustes']];
+const TABS=[['inicio','Início'],['envios','Uva enviada'],['pcs','Prestação de contas'],['custos','Notas e custos'],['embalagens','Estoque'],['producao','Produção'],['leitura','Leitor QR'],['pulverizacoes','Pulverização'],['financeiro','Financeiro'],['relatorios','Relatórios'],['talhoes','Cadastros'],['ajustes','Ajustes']];
 
 /* ---------- render ---------- */
 function anos(){const s=new Set([String(new Date().getFullYear())]);const a=d=>d&&s.add(String(d).slice(0,4));
   S.custos.forEach(c=>a(c.data));S.envios.forEach(e=>a(e.data));S.pcs.forEach(p=>a(pcData(p)));S.embalagens.forEach(e=>a(e.data));S.movfin.forEach(m=>a(m.data));S.insumos.forEach(e=>a(e.data));S.producao.forEach(e=>a(e.data));S.pulverizacoes.forEach(e=>a(e.data));return[...s].sort().reverse()}
 function render(){
   if(!sessao)return;
+  if(view!=='leitura'&&CAM)camDesligar();
   document.getElementById('farmName').textContent=CFG.fazenda||'Fazenda Pai & Filho';
   const sel=document.getElementById('ano');const as=anos();const opt=['todos',...as].map(a=>`<option value="${a}"${a===ano?' selected':''}>${a==='todos'?'Todos os anos':'Ano '+a}</option>`).join('');
   if(sel.innerHTML!==opt)sel.innerHTML=opt;
-  document.getElementById('tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${k===view}" data-tab="${k}">${l}</button>`).join('');
+  const AB=abas();if(!AB.some(a=>a[0]===view))view=AB[0][0];
+  document.getElementById('tabs').innerHTML=AB.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${k===view}" data-tab="${k}">${l}</button>`).join('');
   const el=document.getElementById('view');
+  const carregando=loaded.size<COLS.length&&!local;
+  if(view==='leitura'&&!carregando&&document.getElementById('qrShell')){atualizarLeitura();return}
   const ae=document.activeElement;const keep=ae&&el.contains(ae)&&ae.id?ae.id:null;
-  el.innerHTML=(loaded.size<COLS.length&&!local)?'<div class="empty">Carregando os dados da fazenda…</div>':V[view]();
+  el.innerHTML=carregando?'<div class="empty">Carregando os dados da fazenda…</div>':V[view]();
   if(keep){const k=document.getElementById(keep);k&&k.focus()}
+  if(view==='leitura'&&!carregando)montarLeitura();
 }
 document.getElementById('ano').addEventListener('change',e=>{ano=e.target.value;try{localStorage.setItem(LKEY+'-ano',ano)}catch(x){}render()});
 try{const a=localStorage.getItem(LKEY+'-ano');if(a)ano=a;const t=(location.hash||'').slice(1);if(t&&V[t])view=t}catch(e){}
-document.addEventListener('click',async e=>{const t=e.target.closest('[data-tab],[data-new],[data-edit],[data-exp],[data-go],[data-xml],[data-dia],[data-undo],[data-close-imp],[data-baixa],[data-fin],[data-ofx],[data-autoconc],[data-conc-ok],[data-conc-undo],[data-rep],[data-backup],[data-restore],#cfgSave,#delEx');if(!t)return;
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-tab],[data-new],[data-edit],[data-exp],[data-go],[data-xml],[data-dia],[data-undo],[data-close-imp],[data-baixa],[data-fin],[data-ofx],[data-autoconc],[data-conc-ok],[data-conc-undo],[data-rep],[data-backup],[data-restore],[data-etq],[data-qrver],#lqTeclado,#lqUndo,#lqCamBtn,#cfgSave,#delEx');
+  if(!t){if(view==='leitura'&&!e.target.closest('input,select,textarea,label,a,summary,dialog'))focoLeitor();return}
+  if(t.hasAttribute('data-etq')){abrirEtq();return}
+  if(t.dataset.qrver){abrirQrVer(t.dataset.qrver);return}
+  if(t.id==='lqTeclado'){const i=document.getElementById('qrIn');const man=i.getAttribute('inputmode')==='none';i.setAttribute('inputmode',man?'text':'none');t.textContent=man?'Voltar ao leitor':'Digitar código';i.focus();return}
+  if(t.id==='lqCamBtn'){camLigar();return}
+  if(t.id==='lqUndo'){desfazerLeitura();focoLeitor();return}
   if(t.dataset.baixa){const[c,i]=t.dataset.baixa.split('|');abrirBaixa(c,i);return}
   if(t.dataset.fin){finTab=t.dataset.fin;render();return}
   if(t.hasAttribute('data-ofx')){document.getElementById('ofxIn').click();return}
@@ -1023,7 +1087,7 @@ async function autoConc(btn){btn.disabled=true;btn.textContent='Conciliando…';
   showBanner(n?`${n} lançamento(s) conciliados automaticamente. Confira os pendentes.`:'Nenhuma correspondência automática encontrada. Concilie os pendentes um a um.');render()}
 
 /* ---------- relatórios PDF e Excel ---------- */
-const LIBS={xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',jspdf:'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',auto:'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'};
+const LIBS={qr:'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js',jsqr:'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',jspdf:'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',auto:'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'};
 const loadS=src=>new Promise((ok,no)=>{const ex=document.querySelector(`script[data-src="${src}"]`);if(ex){ex.dataset.ok?ok():ex.addEventListener('load',ok);return}
   const s=document.createElement('script');s.src=src;s.dataset.src=src;s.onload=()=>{s.dataset.ok='1';ok()};s.onerror=()=>no(new Error('não consegui carregar o gerador'));document.head.appendChild(s)});
 const periodo=()=>ano==='todos'?'Todo o período':'Ano '+ano;
@@ -1105,7 +1169,151 @@ function abrirRestore(j,nome){RESTORE=j;impF.dataset.mode='restore';document.get
 async function salvarRestore(err){const j=RESTORE,p=document.getElementById('rs_prog');let n=0;
   for(const c of TODAS()){if(c==='acesso')continue;for(const d of (j.colecoes||{})[c]||[]){if(!d||!d.id)continue;await rawSet(c,d);n++;if(n%20===0)p.textContent=n+' registros restaurados…'}}
   if(j.config)await putCfg(j.config);showBanner(n+' registros restaurados do backup.');return true}
-const MODOS={baixa:salvarBaixa,ofx:salvarOFX,restore:salvarRestore};
+/* ---------- leitor QR das embaladeiras ---------- */
+const normCod=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9-]/g,'');
+const qrBase=e=>e.codigo?normCod(e.codigo):('EMB-'+e.id).toUpperCase();
+const abas=()=>sessao?.papel==='leitor'?[['leitura','Leitor QR']]:TABS.filter(([k])=>k!=='leitura'||canScan);
+const LQK=LKEY+'-leitor';
+const LQ={nome:'',data:hoje(),talhao:'',embalagem:'',valor:0};
+try{Object.assign(LQ,JSON.parse(localStorage.getItem(LQK)||'{}'),{data:hoje()})}catch(e){}
+const salvarLQ=()=>{try{localStorage.setItem(LQK,JSON.stringify({nome:LQ.nome,talhao:LQ.talhao,embalagem:LQ.embalagem}))}catch(e){}};
+const QR={est:'',docs:{},st:{},hist:[],ult:null,pend:0};
+try{QR.est=sessionStorage.getItem(LKEY+'-est')||''}catch(e){}
+if(!QR.est){QR.est=Math.random().toString(36).slice(2,8);try{sessionStorage.setItem(LKEY+'-est',QR.est)}catch(e){}}
+const h36=s=>{let h=5381;for(const c of String(s))h=((h<<5)+h+c.charCodeAt(0))|0;return(h>>>0).toString(36)};
+const horaAgora=()=>new Date().toTimeString().slice(0,8);
+function montarLeitura(){if(LQ.valor===0&&CFG.valorCaixa)LQ.valor=+CFG.valorCaixa||0;
+  const v=document.getElementById('lq_v');if(v&&!v.value&&LQ.valor)v.value=String(LQ.valor).replace('.',',');
+  atualizarLeitura();focoLeitor();try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}}
+function focoLeitor(){if(view!=='leitura'||dlg.open||imp.open)return;const i=document.getElementById('qrIn');if(i&&document.activeElement!==i)i.focus({preventScroll:true})}
+function qrDocId(p){return('qr_'+LQ.data+'_'+QR.est+'_'+p+'_'+h36(LQ.talhao+'|'+LQ.embalagem+'|'+LQ.valor)).replace(/[^A-Za-z0-9_\-.~:@+]/g,'').slice(0,190)}
+function qrDoc(p){const id=qrDocId(p);let d=QR.docs[id];
+  if(!d){const ex=S.producao.find(x=>x.id===id);d=QR.docs[id]=ex?{...ex,caixas:+ex.caixas||0,seqs:[...(ex.seqs||[])]}:{id,data:LQ.data,pessoa:p,talhao:LQ.talhao,embalagem:LQ.embalagem,valorCaixa:LQ.valor,caixas:0,seqs:[],origem:'QR',estacao:LQ.nome,primeira:'',ultima:''}}
+  return d}
+function lqStatus(){const s=document.getElementById('lqSt');if(!s)return;const err=Object.values(QR.st).find(x=>x.erro);
+  s.innerHTML=err?`<b class="neg">${esc(err.erro)}</b>`:QR.pend?'Salvando leituras…':`Estação ${esc(LQ.nome||'sem nome')} · tudo salvo na nuvem${local?' (neste aparelho)':''}, somado com as outras estações.`}
+function qrSalvar(id){const st=QR.st[id]||(QR.st[id]={busy:false,dirty:false,erro:''});st.dirty=true;if(st.busy)return;st.busy=true;QR.pend++;lqStatus();
+  (async()=>{while(st.dirty){st.dirty=false;const d=QR.docs[id];
+    try{if(d.caixas<=0)await del('producao',id);else{const{id:_i,...body}=d;await put('producao',{id,...body,estacao:LQ.nome||d.estacao||''})}st.erro=''}
+    catch(e){if(e&&e.code==='permission-denied'){st.erro='Seu usuário não tem permissão para registrar caixas. Peça ao administrador o perfil Leitor QR.';break}
+      st.erro='Sem conexão: as leituras ficam guardadas aqui e são enviadas assim que a internet voltar.';lqStatus();st.dirty=true;await new Promise(r=>setTimeout(r,2000+Math.random()*1500))}}
+    st.busy=false;QR.pend--;lqStatus()})()}
+function linhasDia(){const ids=new Set(Object.keys(QR.docs));return[...S.producao.filter(p=>p.data===LQ.data&&!ids.has(p.id)),...Object.values(QR.docs).filter(d=>d.data===LQ.data&&d.caixas>0)]}
+const totalDia=p=>sum(linhasDia().filter(r=>r.pessoa===p),r=>r.caixas);
+function lidas(p){const ids=new Set(Object.keys(QR.docs));const s=new Set();
+  S.producao.forEach(r=>{if(r.pessoa===p&&!ids.has(r.id))(r.seqs||[]).forEach(n=>s.add(n))});Object.values(QR.docs).forEach(d=>{if(d.pessoa===p)d.seqs.forEach(n=>s.add(n))});return s}
+let AC=null;function bip(ok){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.type=ok?'sine':'square';o.frequency.value=ok?1320:200;g.gain.value=.08;o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+(ok?.09:.35))}catch(e){}}
+function feed(kind,titulo,sub){const f=document.getElementById('lqFeed');if(!f)return;f.className='qr-feed '+kind;void f.offsetWidth;f.classList.add('flash');f.innerHTML=`<span class="nm">${titulo}</span><span>${sub||''}</span>`}
+function registrar(raw){const s0=String(raw||'').trim().toUpperCase();const m0=s0.match(/^(.*)\.(\d{1,7})$/);
+  const bruto=m0?normCod(m0[1])+'.'+m0[2]:normCod(s0);if(!bruto)return;
+  if(!canScan){bip(false);feed('bad','Sem permissão','Entre com um usuário Administrador ou Leitor QR.');return}
+  if(!LQ.data){bip(false);feed('bad','Informe a data','Escolha a data da leitura no campo acima.');return}
+  const agora=Date.now();if(QR.ult&&QR.ult.k===bruto&&agora-QR.ult.t<1500)return;QR.ult={k:bruto,t:agora};
+  const m=bruto.match(/^(.+)\.(\d{1,7})$/);const base=m?m[1]:bruto,seq=m?+m[2]:null;
+  const e=S.equipe.find(x=>x.funcao==='Embaladeira'&&qrBase(x)===base);
+  if(!e){bip(false);feed('bad','Código não reconhecido',`<span class="mono">${esc(bruto)}</span> não é de nenhuma embaladeira cadastrada.`);return}
+  if(e.ativo==='Não'){bip(false);feed('bad',esc(e.nome),'Cadastro marcado como "Saiu". Reative em Cadastros → Equipe para contar.');return}
+  if(seq!=null&&lidas(e.id).has(seq)){bip(false);feed('bad','Etiqueta já lida',`${esc(e.nome)} · etiqueta nº ${seq} já foi contada. Esta caixa não entrou de novo.`);return}
+  const d=qrDoc(e.id);d.caixas++;if(seq!=null)d.seqs.push(seq);const hh=horaAgora();if(!d.primeira)d.primeira=hh;d.ultima=hh;
+  QR.hist.push({id:d.id,p:e.id,seq,h:hh});if(QR.hist.length>300)QR.hist.shift();qrSalvar(d.id);bip(true);
+  feed('ok',esc(e.nome),`+1 caixa${seq!=null?' · etiqueta nº '+seq:''} · no dia: <b>${int(totalDia(e.id))} caixas</b>`);atualizarLeitura()}
+function desfazerLeitura(){const h=QR.hist.pop();if(!h){feed('warn','Nada para desfazer','Nenhuma leitura feita nesta estação desde que a página abriu.');return}
+  const d=QR.docs[h.id];if(d){d.caixas=Math.max(0,d.caixas-1);if(h.seq!=null)d.seqs=d.seqs.filter(n=>n!==h.seq);qrSalvar(h.id)}
+  QR.ult=null;feed('warn','Leitura desfeita',`${esc(pNome(h.p))} · menos 1 caixa${h.seq!=null?' (etiqueta nº '+h.seq+' liberada)':''}`);atualizarLeitura()}
+function atualizarLeitura(){const r=document.getElementById('lqRank');if(!r)return;
+  const g={};linhasDia().forEach(p=>{g[p.pessoa]=(g[p.pessoa]||0)+(+p.caixas||0)});const rk=Object.entries(g).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);const tot=sum(rk,x=>x[1]);
+  r.innerHTML=rk.length?`<div class="tbl"><table><thead><tr><th class="n">#</th><th>Embaladeira</th><th class="n">Caixas</th><th class="n">Parte</th></tr></thead><tbody>${rk.map(([p,c],i)=>`<tr><td class="n">${i+1}</td><td>${esc(pNome(p))}</td><td class="n"><b>${int(c)}</b></td><td class="n">${num(c/tot*100)}%</td></tr>`).join('')}</tbody><tfoot><tr><td></td><td>Total</td><td class="n">${int(tot)}</td><td></td></tr></tfoot></table></div>`:`<div class="tbl"><div class="empty">Nenhuma caixa em ${fd(LQ.data)} ainda.</div></div>`;
+  const hs=QR.hist.slice(-12).reverse();const hb=document.getElementById('lqHist');
+  if(hb)hb.innerHTML=hs.length?`<div class="tbl"><table><thead><tr><th>Hora</th><th>Embaladeira</th><th class="n">Etiqueta</th></tr></thead><tbody>${hs.map(h=>`<tr><td class="num">${esc(h.h)}</td><td>${esc(pNome(h.p))}</td><td class="n">${h.seq!=null?'nº '+h.seq:'crachá'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="tbl"><div class="empty">As leituras desta estação aparecem aqui.</div></div>';
+  lqStatus()}
+async function imagemDe(file){try{return await createImageBitmap(file)}catch(e){}
+  return await new Promise((ok,no)=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{ok(im)};im.onerror=()=>no(new Error('foto ilegível'));im.src=u})}
+async function lerFoto(file){await loadS(LIBS.jsqr);const im=await imagemDe(file);const W0=im.width||im.naturalWidth,H0=im.height||im.naturalHeight;
+  for(const max of [1400,900,600,2000]){const s=Math.min(1,max/Math.max(W0,H0));const w=Math.round(W0*s),h=Math.round(H0*s);
+    const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(im,0,0,w,h);
+    const r=window.jsQR(x.getImageData(0,0,w,h).data,w,h,{inversionAttempts:'attemptBoth'});if(r&&r.data)return r.data}
+  return null}
+document.addEventListener('keydown',e=>{
+  if(e.target.id==='qrIn'&&(e.key==='Enter'||(e.key==='Tab'&&e.target.value.trim()))){e.preventDefault();const v=e.target.value;e.target.value='';registrar(v);return}
+  if(view==='leitura'&&!dlg.open&&!imp.open&&e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey){const a=document.activeElement;if(!a||!a.matches('input,textarea,select'))focoLeitor()}},true);
+document.addEventListener('change',async e=>{const id=e.target.id;if(!id||!id.startsWith('lq_')&&id!=='qrFoto')return;
+  if(id==='qrFoto'){const f=e.target.files[0];e.target.value='';if(!f)return;feed('warn','Lendo a foto…','Procurando o QR na imagem.');
+    try{const c=await lerFoto(f);if(c)registrar(c);else{bip(false);feed('bad','Não achei o QR na foto','Chegue mais perto, com a etiqueta inteira e bem iluminada, e tente de novo.')}}catch(x){bip(false);feed('bad','Não consegui ler a foto',esc(x.message||''))}focoLeitor();return}
+  if(id==='lq_nome'){LQ.nome=e.target.value.trim();salvarLQ();lqStatus()}
+  if(id==='lq_data'){LQ.data=e.target.value||hoje();QR.hist=QR.hist.filter(h=>(QR.docs[h.id]||{}).data===LQ.data);atualizarLeitura()}
+  if(id==='lq_tal'){LQ.talhao=e.target.value;salvarLQ()}
+  if(id==='lq_emb'){LQ.embalagem=e.target.value.trim();salvarLQ()}
+  if(id==='lq_v'){const v=pBR(e.target.value);LQ.valor=isNaN(v)?0:v}
+  focoLeitor()});
+function qrMat(txt){const q=window.qrcode(0,'M');q.addData(txt,/^[0-9A-Z $%*+\-.\/:]*$/.test(txt)?'Alphanumeric':'Byte');q.make();return q}
+function qrSVG(txt,px){const q=qrMat(txt),n=q.getModuleCount();let d='';
+  for(let r=0;r<n;r++){let c=0;while(c<n){if(q.isDark(r,c)){const s=c;while(c<n&&q.isDark(r,c))c++;d+=`M${s+4} ${r+4}h${c-s}v1h-${c-s}z`}else c++}}
+  return`<svg viewBox="0 0 ${n+8} ${n+8}" width="${px}" height="${px}" role="img" aria-label="QR ${esc(txt)}" shape-rendering="crispEdges"><rect width="${n+8}" height="${n+8}" fill="#ffffff"/><path d="${d}" fill="#000000"/></svg>`}
+function qrPDF(doc,txt,x,y,size){const q=qrMat(txt),n=q.getModuleCount(),m=size/n;doc.setFillColor(0,0,0);
+  for(let r=0;r<n;r++){let c=0;while(c<n){if(q.isDark(r,c)){const s=c;while(c<n&&q.isDark(r,c))c++;doc.rect(x+s*m,y+r*m,(c-s)*m+0.02,m+0.02,'F')}else c++}}}
+const embAtivas=()=>S.equipe.filter(e=>e.funcao==='Embaladeira'&&e.ativo!=='Não').sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));
+async function abrirQrVer(id){const e=S.equipe.find(x=>x.id===id);if(!e)return;
+  try{await loadS(LIBS.qr)}catch(x){showBanner('Não consegui carregar o gerador de QR. Confira a internet.');return}
+  impF.dataset.mode='qrver';document.getElementById('impT').textContent='QR de '+e.nome;document.getElementById('impErr').textContent='';document.getElementById('impS').hidden=true;
+  impB.innerHTML=`<div class="qr-big">${qrSVG(qrBase(e),260)}<b style="font-size:1.2rem">${esc(e.nome)}</b><span class="mono">${esc(qrBase(e))}</span>
+   <p class="note" style="max-width:52ch">Este é o QR do crachá. Cada leitura dele soma uma caixa. Para etiquetas que vão em cada caixa e não podem ser contadas duas vezes, gere as etiquetas numeradas.</p>
+   ${canWrite?`<button class="btn pri" type="button" data-etq-uma="${esc(e.id)}">Gerar etiquetas desta embaladeira</button>`:''}</div>`;imp.showModal()}
+function abrirEtq(so){const eq=embAtivas();impF.dataset.mode='etq';document.getElementById('impT').textContent='Etiquetas e crachás QR';document.getElementById('impS').textContent='Gerar PDF';
+  document.getElementById('impS').hidden=false;document.getElementById('impS').disabled=!eq.length||!dl;document.getElementById('impErr').textContent=dl?'':'Para baixar o PDF, abra o sistema pelo site ou app do Claude com sua conta.';
+  const sq=CFG.etqSeq||{};
+  impB.innerHTML=eq.length?`<div class="nf-opts"><label>O que gerar<select id="etq_tipo"><option value="etq">Etiquetas numeradas para as caixas (24 por folha A4)</option><option value="cracha">Crachás (8 por folha A4)</option></select></label>
+   <label>Quantidade por embaladeira<input id="etq_q" inputmode="numeric" value="1"></label></div>
+   <p class="note">Etiquetas: a quantidade é o número de folhas (24 etiquetas cada), numeradas em sequência. A numeração continua de onde parou, então nenhuma etiqueta se repete. Crachás: a quantidade é o número de crachás. Imprima em folha de etiquetas adesivas A4 3×8 (70 × 37 mm) ou em papel comum e recorte nas linhas.</p>
+   <label class="chk"><input type="checkbox" id="etq_all"${so?'':' checked'}> Todas as embaladeiras</label>
+   <div class="grid-dia">${eq.map(e=>`<label class="chk"><input type="checkbox" data-etq-p="${esc(e.id)}"${!so||so===e.id?' checked':''}><span>${esc(e.nome)}<br><span class="note">${sq[e.id]?'impressas até nº '+sq[e.id]:'nenhuma etiqueta ainda'}</span></span></label>`).join('')}</div>`
+   :'<div class="empty">Cadastre as embaladeiras em Cadastros → Equipe primeiro.</div>';
+  imp.showModal()}
+impB.addEventListener('change',e=>{if(e.target.id==='etq_all')impB.querySelectorAll('[data-etq-p]').forEach(i=>i.checked=e.target.checked)});
+impB.addEventListener('click',e=>{const b=e.target.closest('[data-etq-uma]');if(!b)return;const id=b.dataset.etqUma;imp.close();abrirEtq(id)});
+async function gerarEtiquetas(err){const ids=[...impB.querySelectorAll('[data-etq-p]:checked')].map(i=>i.dataset.etqP);if(!ids.length){err.textContent='Escolha pelo menos uma embaladeira.';return false}
+  const tipo=document.getElementById('etq_tipo').value,q=Math.max(1,Math.min(tipo==='etq'?20:50,parseInt(document.getElementById('etq_q').value)||1));
+  await loadS(LIBS.jspdf);await loadS(LIBS.qr);const{jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});const faz=CFG.fazenda||'Fazenda Pai & Filho';
+  const pessoas=ids.map(id=>S.equipe.find(x=>x.id===id)).filter(Boolean);const novos={};let pg=0;
+  const borda=(x,y,w,h)=>{doc.setDrawColor(190,190,190);doc.setLineWidth(0.1);doc.rect(x,y,w,h)};
+  if(tipo==='etq'){const W=70,H=297/8;
+    for(const e of pessoas){const base=qrBase(e);let n=(CFG.etqSeq||{})[e.id]||0;
+      for(let f=0;f<q;f++){if(pg++)doc.addPage();
+        for(let i=0;i<24;i++){n++;const x=(i%3)*W,y=Math.floor(i/3)*H;borda(x+0.5,y+0.5,W-1,H-1);qrPDF(doc,base+'.'+n,x+3,y+(H-31)/2,31);
+          doc.setTextColor(20,20,20);doc.setFont('helvetica','bold');doc.setFontSize(9.5);doc.text(doc.splitTextToSize(e.nome,31).slice(0,2),x+36,y+8);
+          doc.setFontSize(15);doc.text('Nº '+String(n).padStart(5,'0'),x+36,y+22);
+          doc.setFont('helvetica','normal');doc.setFontSize(6.5);doc.setTextColor(90,90,90);doc.text(doc.splitTextToSize(faz,31).slice(0,1),x+36,y+28);doc.text(base.length>22?base.slice(0,21)+'…':base,x+36,y+32)}}
+      novos[e.id]=n}}
+  else{const W=105,H=297/4;let k=0;
+    for(const e of pessoas)for(let c=0;c<q;c++){if(k&&k%8===0)doc.addPage();const i=k%8,x=(i%2)*W,y=Math.floor(i/2)*H;k++;const base=qrBase(e);
+      borda(x+1,y+1,W-2,H-2);qrPDF(doc,base,x+6,y+(H-50)/2,50);
+      doc.setTextColor(20,20,20);doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text(doc.splitTextToSize(e.nome,38).slice(0,3),x+61,y+20);
+      doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90,90,90);doc.text('EMBALADEIRA',x+61,y+46);doc.text(doc.splitTextToSize(base,38),x+61,y+51);doc.text(doc.splitTextToSize(faz,38).slice(0,2),x+61,y+60)}}
+  const ok=await salvarArquivo(nomeArq(tipo==='etq'?'etiquetas qr':'crachas qr','pdf'),new Blob([doc.output('arraybuffer')],{type:'application/pdf'}));
+  if(ok&&tipo==='etq')await putCfg({etqSeq:{...(CFG.etqSeq||{}),...novos}});
+  if(!ok)err.textContent='O PDF não foi salvo.';return ok}
+/* ---------- leitura ao vivo pela câmera do celular ---------- */
+let CAM=null;
+function camDesligar(){if(!CAM)return;const c=CAM;CAM=null;clearTimeout(c.tm);try{c.st.getTracks().forEach(t=>t.stop())}catch(e){}
+  const box=document.getElementById('lqCam');if(box){box.hidden=true;box.innerHTML=''}const b=document.getElementById('lqCamBtn');if(b)b.textContent='Ler com a câmera do celular'}
+async function camLigar(){if(CAM){camDesligar();focoLeitor();return}
+  const b=document.getElementById('lqCamBtn'),box=document.getElementById('lqCam');if(!b||b.dataset.busy)return;b.dataset.busy='1';
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){feed('bad','Câmera indisponível','Este navegador não libera a câmera. Use "Ler por foto".');return}
+  b.textContent='Abrindo a câmera…';
+  try{await loadS(LIBS.jsqr);const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    const v=document.createElement('video');v.setAttribute('playsinline','');v.muted=true;v.srcObject=st;box.innerHTML='';box.appendChild(v);box.hidden=false;await v.play();
+    const c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true});CAM={st,v,tm:0,k:'',visto:0};b.textContent='Desligar câmera';
+    feed('warn','Câmera ligada','Aponte para a etiqueta dentro do quadro. Cada etiqueta conta uma vez; tire-a da frente da câmera antes da próxima.');
+    const tick=()=>{if(!CAM)return;
+      if(v.readyState>=2&&v.videoWidth){const w=Math.min(720,v.videoWidth),h=Math.round(v.videoHeight*w/v.videoWidth);c.width=w;c.height=h;x.drawImage(v,0,0,w,h);
+        const r=window.jsQR(x.getImageData(0,0,w,h).data,w,h,{inversionAttempts:'dontInvert'});const ag=Date.now();
+        if(r&&r.data){const k=String(r.data).trim().toUpperCase();
+          /* a mesma etiqueta parada na frente da câmera não conta de novo: precisa sair do quadro por 1,5 s */
+          if(k!==CAM.k||ag-CAM.visto>1500){CAM.k=k;QR.ult=null;registrar(r.data)}CAM.visto=ag}}
+      CAM.tm=setTimeout(tick,110)};tick()}
+  catch(e){camDesligar();b.textContent='Ler com a câmera do celular';bip(false);feed('bad','A câmera não abriu',e&&e.name==='NotAllowedError'?'Permita o uso da câmera para este site nas configurações do navegador e toque de novo.':/gerador/.test(e&&e.message||'')?'Sem internet para carregar o leitor. Confira a conexão e tente de novo.':'Feche outros apps que usam a câmera e tente de novo, ou use "Ler por foto".')}
+  finally{delete b.dataset.busy}}
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&CAM)camDesligar()});
+const MODOS={baixa:salvarBaixa,ofx:salvarOFX,restore:salvarRestore,etq:gerarEtiquetas,qrver:async()=>true};
 document.getElementById('ofxIn').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
   try{abrirOFX(parseOFX(await f.text()),f.name)}catch(x){showBanner('Extrato não importado: '+x.message)}});
 document.getElementById('bkIn').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;

@@ -8,6 +8,7 @@ service cloud.firestore {
     function perfilPath() { return /databases/$(database)/documents/usuarios/$(request.auth.uid); }
     function ativo() { return logado() && exists(perfilPath()) && get(perfilPath()).data.ativo != 'Não'; }
     function admin() { return ativo() && get(perfilPath()).data.papel == 'admin'; }
+    function leitor() { return ativo() && get(perfilPath()).data.papel == 'leitor'; }
 
     // Marca de "sistema já iniciado": qualquer um lê (só diz se já existe administrador).
     // Só pode ser criada uma vez, junto com o perfil do primeiro administrador.
@@ -28,6 +29,11 @@ service cloud.firestore {
             && existsAfter(/databases/$(database)/documents/sistema/inicial)
             && request.resource.data.papel == 'admin');
       allow update, delete: if admin();
+    }
+
+    // Leitor QR: registra as caixas lidas no packing (só a produção).
+    match /producao/{id} {
+      allow write: if leitor();
     }
 
     // Todos os dados da fazenda: quem está liberado lê; só administrador grava.

@@ -30,7 +30,15 @@ Sistema de gestão da fazenda: uva enviada à cooperativa, prestação de contas
 ## Perfis
 
 - **Administrador:** lança, edita, exclui e cadastra usuários.
+- **Leitor QR:** só registra as caixas no packing (aba Leitor QR).
 - **Visualizador:** só consulta.
+
+## Leitor QR do packing
+
+1. Em **Cadastros → Equipe**, cadastre as embaladeiras e gere as **etiquetas numeradas** e os **crachás** em PDF.
+2. No celular, abra o site, entre com um usuário **Leitor QR** (ou administrador) e vá em **Leitor QR**.
+3. Toque em **Ler com a câmera do celular** e aponte para a etiqueta. Cada etiqueta numerada conta uma caixa uma única vez.
+4. Também funciona com leitor tipo pistola (USB/Bluetooth) ou por foto.
 
 A trava não depende só da tela: as regras do Firestore recusam no servidor qualquer gravação de quem não é administrador.
 
