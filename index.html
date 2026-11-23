@@ -191,6 +191,7 @@ dialog.wide{width:min(980px,calc(100vw - 24px))}
 .qr-cam video{display:block;width:100%;max-height:55vh;object-fit:cover}
 .qr-cam::after{content:"";position:absolute;inset:18% 22%;border:3px solid rgba(255,255,255,.85);border-radius:14px;pointer-events:none}
 /* romaneio */
+.btn.mais{flex:none;min-width:40px;padding-left:0;padding-right:0;font-size:1.1rem;font-weight:700}.ent-f .row{display:flex;gap:6px}.ent-f .row select{flex:1;min-width:0}
 .ent-f{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:4px 0 14px;padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 .ent-f input,.ent-f select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-weight:400;width:100%;min-width:0;box-sizing:border-box}
 .ent-go{display:flex;gap:6px;align-items:end}.ent-go .btn{flex:1}
@@ -263,7 +264,7 @@ main{grid-template-columns:minmax(0,1fr)}main>.tabs-in{width:100%;max-width:100%
 <script>
 (()=>{
 /* ---------- estado ---------- */
-const COLS=['talhoes','custos','envios','pcs','embalagens','movfin','insumos','producao','pulverizacoes','equipe','notasxml','contas','extrato','romaneios','clientes','deducoes','atividades'];
+const COLS=['talhoes','custos','envios','pcs','embalagens','movfin','insumos','producao','pulverizacoes','equipe','notasxml','contas','extrato','romaneios','clientes','deducoes','atividades','produtores','fazendas','valvulas'];
 const S={acesso:[]}; COLS.forEach(c=>S[c]=[]);
 let CFG={saldoInicial:0,dataSaldo:'',minimos:{},fazenda:'Fazenda Pai & Filho'};
 let db=null, local=false, canWrite=false, canScan=false, dl=null, loaded=new Set();
@@ -349,6 +350,20 @@ const SCH={
   {k:'bairro',l:'Bairro',half:1},
   {k:'municipio',l:'Município',half:1},
   {k:'uf',l:'UF',half:1},
+  {k:'obs',l:'Observação',type:'area'}]},
+ produtores:{t:'Produtor',f:[
+  {k:'nome',l:'Nome do produtor',req:1},
+  {k:'doc',l:'CPF / CNPJ',half:1},
+  {k:'telefone',l:'Telefone',half:1},
+  {k:'obs',l:'Observação',type:'area'}]},
+ fazendas:{t:'Fazenda',f:[
+  {k:'nome',l:'Nome da fazenda',req:1},
+  {k:'municipio',l:'Município',half:1},
+  {k:'uf',l:'UF',half:1},
+  {k:'obs',l:'Observação',type:'area'}]},
+ valvulas:{t:'Válvula',f:[
+  {k:'nome',l:'Nome da válvula',req:1,hint:'Ex.: VITORIA 744'},
+  {k:'talhao',l:'Setor',type:'select',opts:()=>talOpts('— serve para todos os setores —')},
   {k:'obs',l:'Observação',type:'area'}]},
  atividades:{t:'Atividade do packing',f:[
   {k:'nome',l:'Nome',req:1,hint:'Ex.: COLHEITA, EMBALAGEM'},
@@ -629,6 +644,7 @@ frm.addEventListener('submit',async e=>{e.preventDefault();if(!cur)return;
   if(cur.col==='clientes'){const d=soDig(o.doc);if(d&&!(d.length===11?cpfOk(d):d.length===14?cnpjOk(d):false)){err.textContent='CPF / CNPJ inválido. Confira os números.';document.getElementById('f_doc').focus();return}
     if(d){o.doc=fmtDoc(d);o.tipoPessoa=d.length===11?'PF':'PJ';if(S.clientes.some(x=>x.id!==cur.id&&soDig(x.doc)===d)){err.textContent='Já existe um cadastro com este '+(d.length===11?'CPF':'CNPJ')+'.';return}}
     o.nome=o.nome.trim();o.uf=String(o.uf||'').trim().toUpperCase()}
+  if(['produtores','fazendas','valvulas'].includes(cur.col)){o.nome=o.nome.trim().toUpperCase();if(S[cur.col].some(x=>x.id!==cur.id&&String(x.nome).toUpperCase()===o.nome&&(cur.col!=='valvulas'||(x.talhao||'')===(o.talhao||'')))){err.textContent='Já existe o cadastro '+o.nome+'.';return}}
   if(cur.col==='atividades'){o.nome=o.nome.trim().toUpperCase();if(S.atividades.some(x=>x.id!==cur.id&&String(x.nome).toUpperCase()===o.nome)){err.textContent='Já existe a atividade '+o.nome+'.';return}}
   if(cur.col==='deducoes'){o.nome=o.nome.trim().toUpperCase();if(S.deducoes.some(x=>x.id!==cur.id&&String(x.nome).toUpperCase()===o.nome)){err.textContent='Já existe a dedução '+o.nome+'.';return}}
   if(cur.col==='envios'){o.produtor=String(o.produtor||'').trim().toUpperCase();o.valvula=String(o.valvula||'').trim().toUpperCase();
@@ -863,7 +879,7 @@ const V={
   <p class="note">O leitor precisa estar configurado para enviar Enter no fim da leitura (padrão de fábrica). Leituras repetidas da mesma etiqueta em menos de 1,5 s são ignoradas. Etiquetas numeradas só contam uma vez: a segunda leitura do mesmo número é recusada.</p>
   </div>`},
 
- packing(){return`<div class="pk-h"><span class="pill grape">Grupo packing</span><h2>${esc(CFG.packingNome||'PACKING PAI E FILHO')}</h2></div><div class="tabs-in" role="tablist" style="border-bottom:1px solid var(--line);margin-bottom:14px"><button class="tab" role="tab" aria-selected="true">Atividade do Packing</button></div>`+cadLista('atividades')},
+ packing(){return`<div class="pk-h"><span class="pill grape">Grupo packing</span><h2>${esc(CFG.packingNome||'PACKING PAI E FILHO')}</h2></div><div class="tabs-in" role="tablist" style="border-bottom:1px solid var(--line);margin-bottom:14px">${[['atividades','Atividade do Packing'],['produtores','Produtores'],['fazendas','Fazendas'],['valvulas','Válvulas']].map(([k,l])=>`<button class="tab" role="tab" aria-selected="${pkTab===k}" data-pktab="${k}">${l}</button>`).join('')}<button class="tab" data-tab="talhoes" title="Os setores ficam em Cadastros">Setores ↗</button></div>`+cadLista(pkTab)},
  romaneios(){const nav=`<div class="tabs-in" role="tablist" style="border-bottom:1px solid var(--line);margin-bottom:14px">${[['lista','Romaneios'],['cli','Clientes / Cooperativas'],['ded','Deduções Compra/Venda']].map(([k,l])=>`<button class="tab" role="tab" aria-selected="${romTab===k}" data-romtab="${k}">${l}</button>`).join('')}</div>`;
   return nav+(romTab==='cli'?cadLista('clientes'):romTab==='ded'?cadLista('deducoes'):romLista())},
  ajustes(){const nEx=COLS.reduce((t,c)=>t+S[c].filter(r=>r.exemplo).length,0);
@@ -914,7 +930,7 @@ function render(){
 }
 document.getElementById('ano').addEventListener('change',e=>{ano=e.target.value;try{localStorage.setItem(LKEY+'-ano',ano)}catch(x){}render()});
 try{const a=localStorage.getItem(LKEY+'-ano');if(a)ano=a;const t=(location.hash||'').slice(1);if(t&&V[t])view=t}catch(e){}
-document.addEventListener('click',async e=>{const t=e.target.closest('[data-tab],[data-new],[data-edit],[data-exp],[data-go],[data-xml],[data-dia],[data-undo],[data-close-imp],[data-baixa],[data-fin],[data-ofx],[data-autoconc],[data-conc-ok],[data-conc-undo],[data-rep],[data-backup],[data-restore],[data-etq],[data-qrver],[data-romtab],[data-rom-novo],[data-rom-pdf],[data-cad-pdf],[data-ded-padrao],[data-ent-go],[data-ent-limpa],[data-ent-det],[data-ent-pdf],[data-atv-padrao],[data-busca-go],[data-pg],[data-row-edit],[data-row-del],#lqTeclado,#lqUndo,#lqCamBtn,#cfgSave,#delEx');
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-tab],[data-new],[data-edit],[data-exp],[data-go],[data-xml],[data-dia],[data-undo],[data-close-imp],[data-baixa],[data-fin],[data-ofx],[data-autoconc],[data-conc-ok],[data-conc-undo],[data-rep],[data-backup],[data-restore],[data-etq],[data-qrver],[data-romtab],[data-rom-novo],[data-rom-pdf],[data-cad-pdf],[data-ded-padrao],[data-pktab],[data-cad-trazer],[data-quick],[data-ent-go],[data-ent-limpa],[data-ent-det],[data-ent-pdf],[data-atv-padrao],[data-busca-go],[data-pg],[data-row-edit],[data-row-del],#lqTeclado,#lqUndo,#lqCamBtn,#cfgSave,#delEx');
   if(!t){if(view==='leitura'&&!e.target.closest('input,select,textarea,label,a,summary,dialog'))focoLeitor();return}
   if(romClick(t,e))return;
   if(t.hasAttribute('data-etq')){abrirEtq();return}
@@ -1387,6 +1403,17 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&CAM)camDes
 dlg.addEventListener('close',()=>{if(ROM&&ROM._wait)setTimeout(()=>{if(!ROM)return;if(romSig()!==ROM._sig)romSync();else ROM._wait=''},60)});
 /* ---------- entrada da fruta ---------- */
 const FE={ini:'',fim:'',prod:'',faz:'',set:'',val:'',st:'',ras:''};let ENT=null;
+const nomesCad=(col,extra=[])=>[...new Set([...S[col].map(x=>x.nome),...extra].filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
+const valvOpts=tal=>nomesCad('valvulas').filter(n=>!tal||S.valvulas.some(v=>v.nome===n&&(!v.talhao||v.talhao===tal)));
+const maisBtn=(col,alvo,tit)=>canWrite?`<button type="button" class="btn sm mais" data-quick="${col}|${alvo}" title="Cadastrar ${tit}" aria-label="Cadastrar ${tit}">+</button>`:'';
+function rasUnica(base,id){let r=base,n=2;while(S.envios.some(x=>x.id!==id&&String(x.rastreabilidade||'').toUpperCase()===r))r=base+'-'+n++;return r}
+let QUICK=null;
+function quickAbrir(col,alvo){QUICK={col,alvo,n:S[col].length};const pre=col==='valvulas'&&ENT&&ENT.talhao?{talhao:ENT.talhao}:col==='valvulas'&&FE.set?{talhao:FE.set}:undefined;openForm(col,null,pre)}
+function quickVolta(){const q=QUICK;QUICK=null;if(!q||S[q.col].length<=q.n)return;const novo=[...S[q.col]].sort((a,b)=>String(b.em||'').localeCompare(String(a.em||'')))[0];if(!novo)return;
+  const v=q.col==='talhoes'?novo.id:novo.nome;
+  if(q.alvo.startsWith('fe_')){FE[q.alvo.slice(3)]=v;render();return}
+  if(ENT&&imp.open&&impF.dataset.mode==='ent'){ENT[q.alvo]=v;if(q.alvo==='talhao'&&ENT.valvula&&!valvOpts(v).includes(ENT.valvula))ENT.valvula='';renderEnt()}}
+dlg.addEventListener('close',()=>{if(QUICK)setTimeout(quickVolta,60)});
 const PROD_PADRAO=['UVA VITORIA VITACE - 5KG','UVA VITORIA LINA - 5KG','UVA VITORIA EXTRA - 5KG'];
 const num3=v=>(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3});
 const kgUn=p=>{const m=String(p||'').match(/(\d+(?:[.,]\d+)?)\s*KG/i);return m?pBR(m[1]):0};
@@ -1400,16 +1427,16 @@ const entSaldo=(e,semRom)=>(+e.kg||0)-entUsado(e,semRom);
 function entFiltro(){return S.envios.filter(e=>{const d=e.data||'';if(!FE.ini&&!FE.fim&&!inAno(d))return false;if(FE.ini&&d<FE.ini)return false;if(FE.fim&&d>FE.fim)return false;
   if(FE.prod&&e.produtor!==FE.prod)return false;if(FE.faz&&(e.fazenda||'')!==FE.faz)return false;if(FE.set&&e.talhao!==FE.set)return false;if(FE.val&&e.valvula!==FE.val)return false;
   const sd=entSaldo(e);if(FE.st==='aberto'&&!(sd>0.0001))return false;if(FE.st==='baixado'&&sd>0.0001)return false;
-  if(FE.ras&&!String(e.rastreabilidade||'').toUpperCase().includes(FE.ras.toUpperCase()))return false;return true})
+  if(FE.ras&&String(e.rastreabilidade||'')!==FE.ras)return false;return true})
   .sort((a,b)=>String(b.data).localeCompare(String(a.data))||(+b.sequencia||0)-(+a.sequencia||0))}
 function entLista(){const rows=entFiltro(),P=paginar('ent',rows);const tkg=sum(rows,e=>+e.kg||0),tcx=sum(rows,e=>+e.caixas||0),tsd=sum(rows,e=>entSaldo(e));
   const uniq=a=>[...new Set(a.filter(Boolean))].sort();
-  const sel=(id,l,opts,v,todos='Todos')=>`<label>${l}<select id="${id}">${optsH([['',todos],...opts],v)}</select></label>`;
+  const sel=(id,l,opts,v,todos='Todos',btn='')=>`<label>${l}<span class="row"><select id="${id}">${optsH([['',todos],...opts],v)}</select>${btn}</span></label>`;
   const filtros=`<div class="ent-f nf-opts"><label>Data início<input type="date" id="fe_ini" value="${esc(FE.ini)}"></label><label>Data fim<input type="date" id="fe_fim" value="${esc(FE.fim)}"></label>
-   ${sel('fe_prod','Produtor',uniq(S.envios.map(e=>e.produtor)).map(x=>[x,x]),FE.prod)}${sel('fe_faz','Fazenda',uniq(S.envios.map(e=>e.fazenda)).map(x=>[x,x]),FE.faz)}
-   ${sel('fe_set','Setor',S.talhoes.map(t=>[t.id,t.nome]),FE.set)}${sel('fe_val','Válvula',uniq(S.envios.map(e=>e.valvula)).map(x=>[x,x]),FE.val)}
+   ${sel('fe_prod','Produtor',nomesCad('produtores',S.envios.map(e=>e.produtor)).map(x=>[x,x]),FE.prod,'Todos',maisBtn('produtores','fe_prod','produtor'))}${sel('fe_faz','Fazenda',nomesCad('fazendas',S.envios.map(e=>e.fazenda)).map(x=>[x,x]),FE.faz,'Todos',maisBtn('fazendas','fe_faz','fazenda'))}
+   ${sel('fe_set','Setor',S.talhoes.map(t=>[t.id,t.nome]),FE.set,'Todos',maisBtn('talhoes','fe_set','setor'))}${sel('fe_val','Válvula',valvOpts(FE.set).concat(S.envios.filter(e=>!FE.set||e.talhao===FE.set).map(e=>e.valvula)).filter((x,i,a)=>x&&a.indexOf(x)===i).sort().map(x=>[x,x]),FE.val,'Todos',maisBtn('valvulas','fe_val','válvula'))}
    ${sel('fe_st','Status',[['aberto','EM ABERTO'],['baixado','BAIXADO']],FE.st,'TODOS')}
-   <label>Rastreabilidade<input id="fe_ras" value="${esc(FE.ras)}" placeholder="R-26-…"></label><div class="ent-go"><button type="button" class="btn" data-ent-go>Pesquisar</button>${Object.values(FE).some(Boolean)?'<button type="button" class="btn sm" data-ent-limpa>Limpar</button>':''}</div></div>`;
+   ${sel('fe_ras','Rastreabilidade',uniq(S.envios.filter(e=>(!FE.set||e.talhao===FE.set)&&(!FE.val||e.valvula===FE.val)).map(e=>e.rastreabilidade)).reverse().map(x=>[x,x]),FE.ras,'Todas')}<div class="ent-go"><button type="button" class="btn" data-ent-go>Pesquisar</button>${Object.values(FE).some(Boolean)?'<button type="button" class="btn sm" data-ent-limpa>Limpar</button>':''}</div></div>`;
   const st=sd=>sd>0.0001?'<span class="pill warn">Em aberto</span>':'<span class="pill ok">Baixado</span>';
   const tr=e=>{const sd=entSaldo(e);return`<tr><td class="n">${esc(e.sequencia||'—')}${ex(e)}</td><td>${fd(e.data)}</td><td>${esc(e.tipo||'Caixa')}</td><td class="wrap">${esc(e.produtor||'—')}${e.fazenda?`<br><span class="note">${esc(e.fazenda)}</span>`:''}</td><td>${esc(e.atividade||'—')}</td><td>${esc(tNome(e.talhao))}</td><td class="wrap">${esc(e.valvula||'—')}</td><td class="mono">${esc(e.rastreabilidade||'—')}</td><td class="n">${int(e.caixas)}</td><td class="n">${num3(e.kg)}</td><td class="n${sd<-0.0001?' neg':''}">${num3(sd)}<br>${st(sd)}</td>
    <td class="n"><button type="button" class="ico" data-ent-det="${e.id}" title="Detalhes" aria-label="Ver produtos da entrada">${ICO.lista}</button></td><td>${esc(e.contentor||'—')}</td><td class="n">${acoes('envios',e.id)}</td></tr>`};
@@ -1418,7 +1445,7 @@ function entLista(){const rows=entFiltro(),P=paginar('ent',rows);const tkg=sum(r
   ${rows.length?`<div class="tbl"><table class="ent-t"><thead><tr><th class="n">Seq.</th><th>Emissão</th><th>Tipo</th><th>Produtor / fazenda</th><th>Atividade</th><th>Setor</th><th>Válvula</th><th>Rastreabilidade</th><th class="n">Qtd. (cx)</th><th class="n">Qtd. (kg)</th><th class="n">Saldo (kg)</th><th class="n">Detalhes</th><th>Contentor</th><th class="n">Ações</th></tr></thead><tbody>${P.vis.map(tr).join('')}</tbody>
    <tfoot><tr><td>Total</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="n">${int(tcx)}</td><td class="n">${num3(tkg)}</td><td class="n">${num3(tsd)}</td><td></td><td></td><td></td></tr></tfoot></table></div>${P.html}`
   :`<div class="tbl"><div class="empty">Nenhuma entrada encontrada.${canWrite?' <button class="btn sm" data-new="envios">Lançar a primeira</button>':''}</div></div>`}`}
-function entLer(){const g=id=>(document.getElementById(id)||{}).value||'';Object.assign(FE,{ini:g('fe_ini'),fim:g('fe_fim'),prod:g('fe_prod'),faz:g('fe_faz'),set:g('fe_set'),val:g('fe_val'),st:g('fe_st'),ras:g('fe_ras').trim()});(PG.ent||{}).page=0}
+function entLer(){const g=id=>(document.getElementById(id)||{}).value||'';Object.assign(FE,{ini:g('fe_ini'),fim:g('fe_fim'),prod:g('fe_prod'),faz:g('fe_faz'),set:g('fe_set'),val:g('fe_val'),st:g('fe_st'),ras:g('fe_ras')});(PG.ent||{}).page=0}
 async function entPDF(){const rows=entFiltro();const f=[FE.ini&&'de '+fd(FE.ini),FE.fim&&'até '+fd(FE.fim),FE.prod,FE.faz,FE.set&&tNome(FE.set),FE.val,FE.st==='aberto'?'em aberto':FE.st==='baixado'?'baixado':'',FE.ras].filter(Boolean).join(' · ');
   await gerarPDF({titulo:'Entrada da Fruta',kpis:[['Filtros',f||'Nenhum'],['Entradas',String(rows.length)],['Quantidade',int(sum(rows,e=>+e.caixas||0))+' caixas'],['Quantidade (kg)',num3(sum(rows,e=>+e.kg||0))],['Saldo (kg)',num3(sum(rows,e=>entSaldo(e)))]],
    secoes:[{titulo:'Entradas',cols:[C('Seq.'),C('Emissão','date'),C('Tipo'),C('Produtor'),C('Atividade'),C('Setor'),C('Válvula'),C('Rastreabilidade'),C('Qtd. (cx)','int'),C('Qtd. (kg)','num'),C('Saldo (kg)','num'),C('Contentor')],
@@ -1426,7 +1453,7 @@ async function entPDF(){const rows=entFiltro();const f=[FE.ini&&'de '+fd(FE.ini)
    {titulo:'Produtos das entradas',cols:[C('Seq.'),C('Rastreabilidade'),C('Produto'),C('Quantidade','num'),C('Quantidade (kg)','num')],rows:rows.flatMap(e=>entItens(e).map(i=>[e.sequencia||'',e.rastreabilidade||'',i.produto,+i.qtd||0,+i.kg||0]))}]})}
 function abrirEntDet(id){const e=S.envios.find(x=>x.id===id);if(!e)return;impF.dataset.mode='entdet';document.getElementById('impT').textContent='Produtos da Entrada da Fruta';document.getElementById('impS').hidden=true;document.getElementById('impErr').textContent='';
   const it=entItens(e),un=e.tipo==='Pallet'?'PL':'CX';
-  impB.innerHTML=`<p class="note">Entrada nº ${esc(e.sequencia||'—')} · ${fd(e.data)} · ${esc(e.produtor||'')} · ${esc(tNome(e.talhao))}${e.valvula?' · Válvula '+esc(e.valvula):''}${e.contentor?' · Contentor '+esc(e.contentor):''}<br>${esc(e.rastreabilidade||'')}</p>
+  impB.innerHTML=`<p class="note">Entrada nº ${esc(e.sequencia||'—')} · ${fd(e.data)} · ${esc(e.produtor||'')} · Setor ${esc(tNome(e.talhao))}${e.valvula?' · Válvula '+esc(e.valvula):''}${e.contentor?' · Contentor '+esc(e.contentor):''}<br>${esc(e.rastreabilidade||'')}</p>
    <div class="tbl"><table><thead><tr><th>Produto</th><th class="n">Quantidade</th><th class="n">Quantidade Kg</th></tr></thead><tbody>${it.length?it.map(i=>`<tr><td>${esc(i.produto)} <span class="note">Unid: ${un}</span></td><td class="n">${num3(i.qtd)}</td><td class="n">${num3(i.kg)}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">Sem produtos.</td></tr>'}</tbody>
    ${it.length>1?`<tfoot><tr><td>Total</td><td class="n">${num3(sum(it,i=>+i.qtd||0))}</td><td class="n">${num3(sum(it,i=>+i.kg||0))}</td></tr></tfoot>`:''}</table></div>
    <p class="note">Saldo: <b>${num3(entSaldo(e))} kg</b> · usado em romaneios: ${num3(entUsado(e))} kg</p>`;imp.showModal()}
@@ -1434,23 +1461,24 @@ function abrirEnt(rec){const b=rec?JSON.parse(JSON.stringify(rec)):{sequencia:''
    produtor:([...S.envios].sort(byDate('data'))[0]||{}).produtor||CFG.produtor||'',fazenda:([...S.envios].sort(byDate('data'))[0]||{}).fazenda||CFG.fazenda||'',talhao:'',valvula:'',contentor:'',rastreabilidade:'',mercado:'Externo',romaneio:'',embalagem:'',obs:''};
   b.itens=entItens(b).map(i=>({produto:i.produto||'',qtd:vIn(i.qtd),kg:vIn(i.kg),_auto:false}));if(!b.itens.length)b.itens=[{produto:'',qtd:'',kg:'',_auto:true}];
   ENT=b;impF.dataset.mode='ent';const s=document.getElementById('impS');s.textContent='Salvar';s.disabled=!canWrite;s.hidden=!canWrite;document.getElementById('impErr').textContent='';renderEnt();imp.showModal()}
+function entRasPrev(){const r=ENT;if(r.id&&r.rastreabilidade)return r.rastreabilidade;return rasUnica(rastreio({data:r.data,talhao:r.talhao,valvula:r.valvula,caixas:sum(r.itens,i=>nv(i.qtd)),kg:sum(r.itens,i=>nv(i.kg))}),r.id)}
 function renderEnt(){const r=ENT,ro=canWrite?'':' disabled';document.getElementById('impT').textContent=r.id?'Entrada da fruta nº '+(r.sequencia||''):'Nova entrada da fruta';
   const atv=[...new Set([...S.atividades.map(a=>a.nome),r.atividade].filter(Boolean))].sort();
   const L=(id,arr)=>`<datalist id="${id}">${[...new Set(arr.filter(Boolean))].sort().map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`;
   const c=r.talhao&&typeof carencias==='function'?carencias(r.data).find(x=>x.t.id===r.talhao):null;
   const tc=sum(r.itens,i=>nv(i.qtd)),tk=sum(r.itens,i=>nv(i.kg));
-  impB.innerHTML=`<div class="rom-b">${L('entProdutorL',[CFG.produtor,...S.envios.map(e=>e.produtor)])}${L('entFazL',[CFG.fazenda,...S.envios.map(e=>e.fazenda)])}${L('entValL',S.envios.map(e=>e.valvula))}${L('entContL',S.envios.map(e=>e.contentor))}${L('entProdL',[...PROD_PADRAO,...S.envios.flatMap(e=>(e.itens||[]).map(i=>i.produto))])}${L('entEmbL',itensEmb())}
+  impB.innerHTML=`<div class="rom-b">${L('entContL',S.envios.map(e=>e.contentor))}${L('entProdL',[...PROD_PADRAO,...S.envios.flatMap(e=>(e.itens||[]).map(i=>i.produto))])}${L('entEmbL',itensEmb())}
   <div class="nf-opts">
-   <label>Sequência<input data-ek="sequencia" value="${esc(r.sequencia)}" placeholder="automática"${ro}></label>
+   <label>Sequência<input value="${esc(r.sequencia||String(Math.max(0,...S.envios.map(x=>+x.sequencia||0))+1))}" disabled title="Automática"></label>
    <label>Emissão *<input type="date" data-ek="data" value="${esc(r.data)}"${ro}></label>
    <label>Tipo<select data-ek="tipo"${ro}>${optsH(['Caixa','Pallet'],r.tipo)}</select></label>
    <label>Atividade<select data-ek="atividade"${ro}>${optsH(atv.length?atv:['EMBALAGEM','COLHEITA'],r.atividade)}</select></label>
-   <label>Produtor *<input data-ek="produtor" list="entProdutorL" value="${esc(r.produtor)}"${ro}></label>
-   <label>Fazenda<input data-ek="fazenda" list="entFazL" value="${esc(r.fazenda)}"${ro}></label>
-   <label>Setor *<select data-ek="talhao"${ro}>${optsH(talOpts('— escolha —'),r.talhao)}</select></label>
-   <label>Válvula<input data-ek="valvula" list="entValL" value="${esc(r.valvula)}"${ro}></label>
+   <label>Produtor *<span class="row"><select data-ek="produtor"${ro}>${optsH([['','— escolha —'],...nomesCad('produtores',[r.produtor]).map(x=>[x,x])],r.produtor)}</select>${maisBtn('produtores','produtor','produtor')}</span></label>
+   <label>Fazenda<span class="row"><select data-ek="fazenda"${ro}>${optsH([['','— escolha —'],...nomesCad('fazendas',[r.fazenda]).map(x=>[x,x])],r.fazenda)}</select>${maisBtn('fazendas','fazenda','fazenda')}</span></label>
+   <label>Setor *<span class="row"><select data-ek="talhao"${ro}>${optsH(talOpts('— escolha —'),r.talhao)}</select>${maisBtn('talhoes','talhao','setor')}</span></label>
+   <label>Válvula<span class="row"><select data-ek="valvula"${ro}>${optsH([['','— escolha —'],...[...new Set([...valvOpts(r.talhao),r.valvula].filter(Boolean))].map(x=>[x,x])],r.valvula)}</select>${maisBtn('valvulas','valvula','válvula')}</span></label>
    <label>Contentor<input data-ek="contentor" list="entContL" value="${esc(r.contentor)}"${ro}></label>
-   <label>Rastreabilidade<input data-ek="rastreabilidade" value="${esc(r.rastreabilidade)}" placeholder="gerada ao salvar"${ro}></label>
+   <label>Rastreabilidade<input id="entRas" value="${esc(entRasPrev())}" disabled title="Gerada pelo sistema"></label>
    <label>Mercado<select data-ek="mercado"${ro}>${optsH(['Externo','Interno'],r.mercado)}</select></label>
    <label>Nº romaneio / ticket<input data-ek="romaneio" value="${esc(r.romaneio)}"${ro}></label>
    <label class="span-all">Embalagem usada (as caixas saem do estoque de embalagens)<input data-ek="embalagem" list="entEmbL" value="${esc(r.embalagem)}"${ro}></label>
@@ -1464,8 +1492,8 @@ function renderEnt(){const r=ENT,ro=canWrite?'':' disabled';document.getElementB
 function entInput(e){if(impF.dataset.mode!=='ent'||!ENT)return;const el=e.target,k=el.dataset&&el.dataset.ek;if(!k)return;
   if(el.dataset.ei!=null){const n=el.dataset.ei,i=ENT.itens[+n];if(!i)return;i[k]=el.value;if(k==='kg')i._auto=false;
     if((k==='qtd'||k==='produto')&&(i._auto||!String(i.kg).trim())){const u=kgUn(i.produto);if(u&&nv(i.qtd)){i.kg=vIn(+(nv(i.qtd)*u).toFixed(3));i._auto=true;const kin=impB.querySelector(`[data-ei="${n}"][data-ek="kg"]`);if(kin)kin.value=i.kg}}
-    const set=(id,v)=>{const x=document.getElementById(id);if(x)x.textContent=v};set('entTc',num(sum(ENT.itens,i=>nv(i.qtd))));set('entTk',num(sum(ENT.itens,i=>nv(i.kg))));return}
-  ENT[k]=el.value;if(e.type==='change'&&(k==='data'||k==='talhao'))renderEnt()}
+    const set=(id,v)=>{const x=document.getElementById(id);if(x)x.textContent=v};set('entTc',num(sum(ENT.itens,i=>nv(i.qtd))));set('entTk',num(sum(ENT.itens,i=>nv(i.kg))));const ra=document.getElementById('entRas');if(ra)ra.value=entRasPrev();return}
+  ENT[k]=el.value;if(k==='talhao'&&ENT.valvula&&!valvOpts(el.value).includes(ENT.valvula))ENT.valvula='';if(e.type==='change'&&(k==='data'||k==='talhao'))renderEnt();else{const ra=document.getElementById('entRas');if(ra)ra.value=entRasPrev()}}
 impB.addEventListener('input',entInput);impB.addEventListener('change',entInput);
 impB.addEventListener('click',e=>{if(impF.dataset.mode!=='ent'||!ENT)return;const b=e.target.closest('[data-ent-add],[data-ent-rm]');if(!b)return;
   if(b.hasAttribute('data-ent-add'))ENT.itens.push({produto:'',qtd:'',kg:'',_auto:true});else{ENT.itens.splice(+b.dataset.entRm,1);if(!ENT.itens.length)ENT.itens.push({produto:'',qtd:'',kg:'',_auto:true})}renderEnt()});
@@ -1476,21 +1504,22 @@ async function salvarEnt(err){const r=ENT,msg=m=>{err.textContent=m;return false
   if(itens.some(i=>!(i.qtd>0)||!(i.kg>0)))return msg('Preencha a quantidade e os kg de cada produto.');
   const t=S.talhoes.find(x=>x.id===r.talhao);
   const o={sequencia:String(r.sequencia||'').trim()||String(Math.max(0,...S.envios.map(x=>+x.sequencia||0))+1),data:r.data,tipo:r.tipo||'Caixa',atividade:r.atividade||'',
-    produtor:String(r.produtor).trim().toUpperCase(),fazenda:String(r.fazenda||'').trim(),talhao:r.talhao,valvula:String(r.valvula||'').trim().toUpperCase(),contentor:String(r.contentor||'').trim().toUpperCase(),
+    produtor:String(r.produtor).trim(),fazenda:String(r.fazenda||'').trim(),talhao:r.talhao,valvula:String(r.valvula||'').trim(),contentor:String(r.contentor||'').trim().toUpperCase(),
     mercado:r.mercado||'Externo',romaneio:String(r.romaneio||'').trim(),embalagem:String(r.embalagem||'').trim(),obs:r.obs||'',itens,caixas:sum(itens,i=>i.qtd),kg:sum(itens,i=>i.kg),variedade:t?.variedade||'',semana:semanaISO(r.data)};
   if(S.envios.some(x=>x.id!==r.id&&String(x.sequencia)===o.sequencia))return msg('Já existe a entrada de sequência '+o.sequencia+'.');
-  o.rastreabilidade=String(r.rastreabilidade||'').trim().toUpperCase()||rastreio(o);
+  o.rastreabilidade=r.id&&r.rastreabilidade?r.rastreabilidade:rasUnica(rastreio(o),r.id);
   const keep={};['loteColheita','exemplo'].forEach(k=>{if(r[k]!=null)keep[k]=r[k]});
   await put('envios',{id:r.id||null,...keep,...o});ENT=null;showBanner('Entrada nº '+o.sequencia+' salva: '+int(o.caixas)+' caixas, '+num(o.kg)+' kg.');return true}
 function entClick(t,e){
   if(t.dataset.new==='envios'){if(!S.talhoes.length){view='talhoes';render();openForm('talhoes');return true}abrirEnt(null);return true}
   if(t.dataset.edit==='envios'){if(e&&e.target.closest('button'))return true;abrirEnt(S.envios.find(r=>r.id===t.dataset.id));return true}
   if(t.dataset.rowEdit&&t.dataset.rowEdit.startsWith('envios|')){abrirEnt(S.envios.find(r=>r.id===t.dataset.rowEdit.split('|')[1]));return true}
+  if(t.dataset.quick){const[c,a]=t.dataset.quick.split('|');quickAbrir(c,a);return true}
   if(t.hasAttribute('data-ent-go')){entLer();render();return true}
   if(t.hasAttribute('data-ent-limpa')){Object.keys(FE).forEach(k=>FE[k]='');render();return true}
   if(t.dataset.entDet){abrirEntDet(t.dataset.entDet);return true}
   if(t.hasAttribute('data-ent-pdf')){entPDF().catch(x=>showBanner('Não consegui gerar o PDF: '+(x.message||x.code)));return true}return false}
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='fe_ras'){e.preventDefault();entLer();render()}});
+
 /* ---------- romaneio, clientes e deduções ---------- */
 let romTab='lista',ROM=null;const BUSCA={rom:'',cli:'',ded:'',atv:''},PG={};
 const ICO={edit:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
@@ -1524,7 +1553,7 @@ function romLista(){const q=BUSCA.rom.toLowerCase();
   ${busca('rom','Pesquisar por nº, cliente ou pedido')}
   ${rows.length?`<div class="tbl"><table><thead><tr><th>Nº</th><th>Emissão</th><th>Tipo</th><th>Cliente / cooperativa</th><th class="n">Caixas</th><th class="n">Produtos</th><th class="n">Deduções</th><th class="n">Valor total</th><th class="n">Ações</th></tr></thead><tbody>${P.vis.map(r=>{const t=romTot(r);return`<tr><td><b>${esc(r.numero)}</b>${ex(r)}</td><td>${fd(r.dataEmissao)}</td><td>${esc(r.tipo)}</td><td class="wrap">${esc(r.clienteNome||'—')}</td><td class="n">${int(t.cx)}</td><td class="n">${brl(t.prod)}</td><td class="n">${brl(t.ded)}</td><td class="n"><b>${brl(t.total)}</b></td><td class="n">${acoes('romaneios',r.id,`<button type="button" class="ico" data-rom-pdf="${r.id}" title="Imprimir" aria-label="Imprimir romaneio">${ICO.pdf}</button>`)}</td></tr>`}).join('')}</tbody></table></div>${P.html}`
   :`<div class="tbl"><div class="empty">Nenhum romaneio ${ano==='todos'?'ainda':'em '+ano}.${canWrite?' <button class="btn sm" data-rom-novo>Lançar o primeiro</button>':''}</div></div>`}`}
-function cadLista(col){if(col==='atividades')return atvLista();const ded=col==='deducoes',k=ded?'ded':'cli',q=BUSCA[k].toLowerCase();
+function cadLista(col){if(col==='atividades')return atvLista();if(CADS[col])return cadSimples(col);const ded=col==='deducoes',k=ded?'ded':'cli',q=BUSCA[k].toLowerCase();
   const rows=[...S[col]].filter(r=>!q||[r.nome,r.fantasia,r.doc,r.municipio,r.tipo].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));
   const P=paginar(k,rows);
   const tit=ded?'Deduções Compra/Venda':'Clientes / Cooperativas';
@@ -1534,6 +1563,21 @@ function cadLista(col){if(col==='atividades')return atvLista();const ded=col==='
   const tr=r=>ded?`<tr><td>${esc(r.nome)}</td><td>${esc(r.tipo||'Venda')}</td><td>${esc(r.forma||'Por caixa')}</td><td class="n">${r.valorPadrao?(r.forma==='% dos produtos'?num(r.valorPadrao)+'%':brl(r.valorPadrao)):'—'}</td><td class="n">${acoes(col,r.id)}</td></tr>`
     :`<tr><td class="wrap"><b>${esc(r.nome)}</b>${r.fantasia?`<br><span class="note">${esc(r.fantasia)}</span>`:''}</td><td><span class="pill ${r.tipoPessoa==='PF'?'':'grape'}">${r.tipoPessoa==='PF'?'Pessoa física':'Pessoa jurídica'}</span>${r.categoria?' <span class="pill">'+esc(r.categoria)+'</span>':''}</td><td class="mono">${esc(r.doc||'—')}</td><td>${esc([r.municipio,r.uf].filter(Boolean).join(' / ')||'—')}</td><td class="n">${acoes(col,r.id)}</td></tr>`;
   return head+padrao+busca(k,ded?'Pesquisar pelo nome':'Pesquisar por nome, CPF/CNPJ ou cidade')+(rows.length?`<div class="tbl"><table><thead><tr>${cols}</tr></thead><tbody>${P.vis.map(tr).join('')}</tbody></table></div>${P.html}`:`<div class="tbl"><div class="empty">Nenhum cadastro${q?' encontrado':''}.</div></div>`)}
+let pkTab='atividades';
+const CADS={produtores:{t:'Produtores',d:'Quem entrega a fruta no packing. Aparece para escolher na Entrada da Fruta.',x:['CPF / CNPJ',r=>esc(r.doc||'—')]},
+ fazendas:{t:'Fazendas',d:'As fazendas de onde vem a fruta.',x:['Município / UF',r=>esc([r.municipio,r.uf].filter(Boolean).join(' / ')||'—')]},
+ valvulas:{t:'Válvulas',d:'As válvulas de cada setor. Na Entrada da Fruta só aparecem as válvulas do setor escolhido.',x:['Setor',r=>esc(r.talhao?tNome(r.talhao):'Todos os setores')]}};
+function cadSimples(col){const c=CADS[col],k=col;if(BUSCA[k]==null)BUSCA[k]='';const q=BUSCA[k].toLowerCase();
+  const rows=[...S[col]].filter(r=>!q||String(r.nome).toLowerCase().includes(q)).sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));const P=paginar(k,rows);
+  const sem=col==='produtores'?[...new Set(S.envios.map(e=>e.produtor).filter(n=>n&&!S.produtores.some(x=>x.nome===n)))]:col==='fazendas'?[...new Set([CFG.fazenda,...S.envios.map(e=>e.fazenda)].filter(n=>n&&!S.fazendas.some(x=>x.nome===String(n).toUpperCase())))]:[...new Set(S.envios.map(e=>e.valvula).filter(n=>n&&!S.valvulas.some(x=>x.nome===n)))];
+  return`<div class="sec-h"><div><h2>${c.t}</h2><p>${c.d}</p></div><div class="btns"><button class="btn ok-btn" data-cad-pdf="${col}">Imprimir</button>${canWrite?`<button class="btn pri" data-new="${col}">+ Novo</button>`:''}</div></div>`
+  +(sem.length&&canWrite?`<div class="banner">Há ${sem.length} nome(s) já usado(s) nas entradas que ainda não estão neste cadastro: ${sem.slice(0,6).map(esc).join(', ')}${sem.length>6?'…':''}. <button class="btn sm" data-cad-trazer="${col}">Cadastrar todos</button></div>`:'')
+  +busca(k,'Pesquisar pelo nome')+(rows.length?`<div class="tbl"><table><thead><tr><th>Nome</th><th>${c.x[0]}</th><th class="n">Ações</th></tr></thead><tbody>${P.vis.map(r=>`<tr><td>${esc(r.nome)}${r.obs?`<br><span class="note">${esc(r.obs)}</span>`:''}</td><td>${c.x[1](r)}</td><td class="n">${acoes(col,r.id)}</td></tr>`).join('')}</tbody></table></div>${P.html}`:`<div class="tbl"><div class="empty">Nenhum cadastro${q?' encontrado':''}.</div></div>`)}
+async function cadTrazer(col,b){b.disabled=true;const nomes=col==='produtores'?S.envios.map(e=>e.produtor):col==='fazendas'?[CFG.fazenda,...S.envios.map(e=>e.fazenda)]:S.envios.map(e=>e.valvula);
+  const feitos=new Set(S[col].map(x=>String(x.nome).toUpperCase()));for(const n0 of nomes){const n=String(n0||'').trim().toUpperCase();if(!n||feitos.has(n))continue;feitos.add(n);
+    const doc={id:null,nome:n};if(col==='valvulas'){const ts=[...new Set(S.envios.filter(e=>String(e.valvula).toUpperCase()===n).map(e=>e.talhao))];if(ts.length===1)doc.talhao=ts[0]}await put(col,doc)}
+  if(col!=='valvulas')for(const e of S.envios){const f=col==='produtores'?'produtor':'fazenda';if(e[f]&&e[f]!==String(e[f]).trim().toUpperCase())await put('envios',{...e,[f]:String(e[f]).trim().toUpperCase()})}
+  showBanner('Cadastros criados a partir das entradas.')}
 function atvLista(){const q=BUSCA.atv.toLowerCase();const rows=[...S.atividades].filter(r=>!q||String(r.nome).toLowerCase().includes(q)).sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));const P=paginar('atv',rows);
   return`<div class="sec-h"><div><h2>Atividade do Packing</h2><p>As atividades feitas no packing. Cadastre mais pelo + Novo, edite pelo lápis e exclua pela lixeira.</p></div><div class="btns"><button class="btn ok-btn" data-cad-pdf="atividades">Imprimir</button>${canWrite?'<button class="btn pri" data-new="atividades">+ Novo</button>':''}</div></div>`
   +(!S.atividades.length&&canWrite?`<div class="banner">Nenhuma atividade cadastrada. <button class="btn sm" data-atv-padrao>Carregar COLHEITA e EMBALAGEM</button></div>`:'')
@@ -1549,6 +1593,7 @@ function renderRom(){const r=ROM,T=romTot(r),ro=canWrite?'':' disabled',un=r.tip
   if(r._aba==='geral'){const cli=[['','— escolha o cliente —'],...[...S.clientes].sort((a,b)=>String(a.nome).localeCompare(String(b.nome))).map(c=>[c.id,c.nome+(c.doc?' · '+c.doc:'')])];
     const hr=r.dataInclusao?new Date(r.dataInclusao):null;
     h+=`<div class="nf-opts">
+     <label>Nº do romaneio<input value="${esc(r.numero||String(Math.max(0,...S.romaneios.map(x=>+x.numero||0))+1))}" disabled title="Automático, começa em 1"></label>
      <label>Nº do pedido (opcional)<input data-rk="pedido" value="${esc(r.pedido)}"${ro}></label>
      <label>Data de emissão *<input type="date" data-rk="dataEmissao" value="${esc(r.dataEmissao)}"${ro}></label>
      <label>Tipo *<select data-rk="tipo"${ro}>${optsH([['Pallet','1 - Pallet'],['Caixa','2 - Caixa']],r.tipo)}</select></label>
@@ -1559,7 +1604,7 @@ function renderRom(){const r=ROM,T=romTot(r),ro=canWrite?'':' disabled',un=r.tip
      <h3>Dados do usuário</h3><div class="nf-opts"><label>Usuário inclusão<input value="${esc(r.usuarioInclusao||'')}" disabled></label><label>Data inclusão<input value="${hr?fd(hr.toISOString().slice(0,10)):''}" disabled></label><label>Hora inclusão<input value="${hr?hr.toLocaleTimeString('pt-BR'):''}" disabled></label></div>`}
   else if(r._aba==='prod'){const tal=talOpts('—');const prodL=[...new Set([...S.talhoes.map(t=>t.variedade),'EXTRA','LINA','VITACE','PREMIUM','LININHA',...S.romaneios.flatMap(x=>(x.itens||[]).map(i=>i.produto))].filter(Boolean))];
     const pal=r.tipo==='Pallet';
-    h+=`<datalist id="romRasL">${S.envios.filter(e=>e.rastreabilidade&&entSaldo(e,r.id)>0.0001).sort(byDate('data')).map(e=>`<option value="${esc(e.rastreabilidade)}">${esc(tNome(e.talhao))} · saldo ${num(entSaldo(e,r.id))} kg</option>`).join('')}</datalist><datalist id="romProdL">${prodL.map(p=>`<option value="${esc(p)}">`).join('')}</datalist><div class="tbl"><table><thead><tr><th>Produto</th><th>Rastreabilidade</th><th>Lote / latada</th><th class="n">${un}</th>${pal?'<th class="n">Caixas</th>':''}<th class="n">Peso (kg)</th><th class="n">R$ por ${pal?'pallet':'caixa'}</th><th class="n">Total</th><th></th></tr></thead><tbody>${r.itens.map((i,n)=>{const a=`data-rs="itens" data-ri="${n}"`;return`<tr><td><input class="cell-in" ${a} data-rk="produto" list="romProdL" value="${esc(i.produto)}" aria-label="Produto"${ro}></td><td><input class="cell-in" ${a} data-rk="rastreio" list="romRasL" value="${esc(i.rastreio||'')}" aria-label="Rastreabilidade" placeholder="R-…"${ro}></td><td><select class="cell-in" ${a} data-rk="talhao" aria-label="Lote"${ro}>${optsH(tal,i.talhao)}</select></td><td class="n"><input class="cell-in num" ${a} data-rk="qtd" inputmode="decimal" value="${esc(i.qtd)}" aria-label="${un}"${ro}></td>${pal?`<td class="n"><input class="cell-in num" ${a} data-rk="caixas" inputmode="decimal" value="${esc(i.caixas)}" aria-label="Caixas"${ro}></td>`:''}<td class="n"><input class="cell-in num" ${a} data-rk="peso" inputmode="decimal" value="${esc(i.peso)}" aria-label="Peso"${ro}></td><td class="n"><input class="cell-in num" ${a} data-rk="unit" inputmode="decimal" value="${esc(i.unit)}" aria-label="Valor unitário"${ro}></td><td class="n" id="romIt${n}">${brl(nv(i.qtd)*nv(i.unit))}</td><td>${canWrite?`<button type="button" class="ico del" data-rom-rm="itens|${n}" title="Remover" aria-label="Remover produto">${ICO.del}</button>`:''}</td></tr>`}).join('')}</tbody>
+    h+=`<datalist id="romProdL">${prodL.map(p=>`<option value="${esc(p)}">`).join('')}</datalist><div class="tbl"><table><thead><tr><th>Produto</th><th>Rastreabilidade</th><th>Lote / latada</th><th class="n">${un}</th>${pal?'<th class="n">Caixas</th>':''}<th class="n">Peso (kg)</th><th class="n">R$ por ${pal?'pallet':'caixa'}</th><th class="n">Total</th><th></th></tr></thead><tbody>${r.itens.map((i,n)=>{const a=`data-rs="itens" data-ri="${n}"`;return`<tr><td><input class="cell-in" ${a} data-rk="produto" list="romProdL" value="${esc(i.produto)}" aria-label="Produto"${ro}></td><td><select class="cell-in" ${a} data-rk="rastreio" aria-label="Rastreabilidade"${ro}>${optsH([['','— escolha —'],...S.envios.filter(e=>e.rastreabilidade&&(entSaldo(e,r.id)>0.0001||e.rastreabilidade===i.rastreio)).sort(byDate('data')).map(e=>[e.rastreabilidade,e.rastreabilidade+' · '+tNome(e.talhao)+' · saldo '+num(entSaldo(e,r.id))+' kg'])],i.rastreio||'')}</select></td><td><select class="cell-in" ${a} data-rk="talhao" aria-label="Lote"${ro}>${optsH(tal,i.talhao)}</select></td><td class="n"><input class="cell-in num" ${a} data-rk="qtd" inputmode="decimal" value="${esc(i.qtd)}" aria-label="${un}"${ro}></td>${pal?`<td class="n"><input class="cell-in num" ${a} data-rk="caixas" inputmode="decimal" value="${esc(i.caixas)}" aria-label="Caixas"${ro}></td>`:''}<td class="n"><input class="cell-in num" ${a} data-rk="peso" inputmode="decimal" value="${esc(i.peso)}" aria-label="Peso"${ro}></td><td class="n"><input class="cell-in num" ${a} data-rk="unit" inputmode="decimal" value="${esc(i.unit)}" aria-label="Valor unitário"${ro}></td><td class="n" id="romIt${n}">${brl(nv(i.qtd)*nv(i.unit))}</td><td>${canWrite?`<button type="button" class="ico del" data-rom-rm="itens|${n}" title="Remover" aria-label="Remover produto">${ICO.del}</button>`:''}</td></tr>`}).join('')}</tbody>
      <tfoot><tr><td>Total</td><td></td><td></td><td class="n" id="romQtd">${num(sum(r.itens,i=>nv(i.qtd)))}</td>${pal?`<td class="n" id="romCx">${int(T.cx)}</td>`:''}<td class="n" id="romPeso">${num(sum(r.itens,i=>nv(i.peso)))}</td><td></td><td class="n" id="romProd">${brl(T.prod)}</td><td></td></tr></tfoot></table></div>${canWrite?'<div class="btns"><button type="button" class="btn" data-rom-add="itens">+ Adicionar produto</button></div>':''}`}
   else{const dl=[['','— escolha a dedução —'],...[...S.deducoes].sort((a,b)=>String(a.nome).localeCompare(String(b.nome))).map(d=>[d.id,d.nome+(d.tipo&&d.tipo!=='Venda'?' ('+d.tipo+')':'')])];
     h+=`<div class="tbl"><table><thead><tr><th>Dedução</th><th>Cálculo</th><th class="n">Caixas</th><th class="n">Valor (R$ ou %)</th><th class="n">Total</th><th></th></tr></thead><tbody>${r.deducoes.length?r.deducoes.map((d,n)=>{const a=`data-rs="deducoes" data-ri="${n}"`;return`<tr><td><select class="cell-in" ${a} data-rk="ded" aria-label="Dedução"${ro}>${optsH(dl,d.ded)}</select></td><td><select class="cell-in" ${a} data-rk="forma" aria-label="Cálculo"${ro}>${optsH(['Por caixa','Valor fixo','% dos produtos'],d.forma||'Por caixa')}</select></td><td class="n"><input class="cell-in num" ${a} data-rk="qtd" inputmode="decimal" value="${esc(d.qtd)}" aria-label="Caixas"${d.forma&&d.forma!=='Por caixa'?' disabled':ro}></td><td class="n"><input class="cell-in num" ${a} data-rk="unit" inputmode="decimal" value="${esc(d.unit)}" aria-label="Valor"${ro}></td><td class="n" id="romDd${n}">${brl(dedTotal(d,T.prod,T.cx))}</td><td>${canWrite?`<button type="button" class="ico del" data-rom-rm="deducoes|${n}" title="Remover" aria-label="Remover dedução">${ICO.del}</button>`:''}</td></tr>`}).join(''):`<tr><td colspan="6" class="empty">Nenhuma dedução neste romaneio.</td></tr>`}</tbody>
@@ -1611,7 +1656,8 @@ async function romPDF(id){const r=S.romaneios.find(x=>x.id===id);if(!r)return;co
     secoes:[{titulo:'Produtos do romaneio',cols:[C('Produto'),C('Rastreabilidade'),C('Lote / latada'),C(pal?'Pallets':'Caixas','num'),...(pal?[C('Caixas','int')]:[]),C('Peso (kg)','num'),C('R$ por '+(pal?'pallet':'caixa'),'brl'),C('Total','brl')],
       rows:(r.itens||[]).map(i=>[i.produto,i.rastreio||'',i.talhao?tNome(i.talhao):'',nv(i.qtd),...(pal?[nv(i.caixas)]:[]),nv(i.peso),nv(i.unit),nv(i.qtd)*nv(i.unit)])},
      {titulo:'Deduções do romaneio',cols:[C('Dedução'),C('Cálculo'),C('Caixas','num'),C('R$ por unidade ou %','num'),C('Total','brl')],rows:(r.deducoes||[]).map(d=>[d.nome,d.forma,d.forma==='Por caixa'?nv(d.qtd):'',nv(d.unit),dedTotal(d,T.prod,T.cx)])}]})}
-async function cadPDF(col){if(col==='atividades'){await gerarPDF({titulo:'Atividade do Packing',semPeriodo:1,kpis:[['Grupo',CFG.packingNome||'PACKING PAI E FILHO']],secoes:[{titulo:'Atividades cadastradas',cols:[C('Nome'),C('Observação')],rows:[...S.atividades].sort((a,b)=>String(a.nome).localeCompare(String(b.nome))).map(r=>[r.nome,r.obs||''])}]});return}const ded=col==='deducoes';const rows=[...S[col]].sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));
+async function cadPDF(col){if(CADS[col]){const c=CADS[col];await gerarPDF({titulo:c.t,semPeriodo:1,secoes:[{titulo:'Cadastro',cols:[C('Nome'),C(c.x[0]),C('Observação')],rows:[...S[col]].sort((a,b)=>String(a.nome).localeCompare(String(b.nome))).map(r=>[r.nome,col==='valvulas'?(r.talhao?tNome(r.talhao):'Todos'):col==='produtores'?r.doc||'':[r.municipio,r.uf].filter(Boolean).join(' / '),r.obs||''])}]});return}
+  if(col==='atividades'){await gerarPDF({titulo:'Atividade do Packing',semPeriodo:1,kpis:[['Grupo',CFG.packingNome||'PACKING PAI E FILHO']],secoes:[{titulo:'Atividades cadastradas',cols:[C('Nome'),C('Observação')],rows:[...S.atividades].sort((a,b)=>String(a.nome).localeCompare(String(b.nome))).map(r=>[r.nome,r.obs||''])}]});return}const ded=col==='deducoes';const rows=[...S[col]].sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));
   await gerarPDF(ded?{titulo:'Deduções Compra/Venda',semPeriodo:1,secoes:[{titulo:'Deduções cadastradas',cols:[C('Nome'),C('Tipo'),C('Cálculo padrão'),C('R$ por unidade ou %','num')],rows:rows.map(r=>[r.nome,r.tipo||'Venda',r.forma||'Por caixa',nv(r.valorPadrao)])}]}
     :{titulo:'Clientes / Cooperativas',semPeriodo:1,secoes:[{titulo:'Cadastro',cols:[C('Nome / Razão social'),C('Tipo'),C('CPF / CNPJ'),C('Telefone'),C('Município / UF')],rows:rows.map(r=>[r.nome,r.tipoPessoa==='PF'?'Física':'Jurídica',r.doc||'',r.telefone||'',[r.municipio,r.uf].filter(Boolean).join(' / ')])}]})}
 async function dedPadrao(b){b.disabled=true;for(const n of DED_PADRAO){if(!S.deducoes.some(d=>String(d.nome).toUpperCase()===n))await put('deducoes',{id:null,nome:n,tipo:'Venda',forma:'Por caixa',valorPadrao:0})}showBanner('Deduções padrão cadastradas. Ajuste o cálculo e o valor de cada uma pelo lápis.')}
@@ -1623,6 +1669,8 @@ function romClick(t,e){
   if(t.dataset.cadPdf){cadPDF(t.dataset.cadPdf).catch(x=>showBanner('Não consegui gerar o PDF: '+(x.message||x.code)));return true}
   if(t.hasAttribute('data-ded-padrao')){dedPadrao(t);return true}
   if(t.hasAttribute('data-atv-padrao')){atvPadrao(t);return true}
+  if(t.dataset.pktab){pkTab=t.dataset.pktab;render();return true}
+  if(t.dataset.cadTrazer){cadTrazer(t.dataset.cadTrazer,t);return true}
   if(t.dataset.buscaGo){const k=t.dataset.buscaGo;BUSCA[k]=(document.getElementById('busca_'+k)||{}).value||'';(PG[k]||{}).page=0;render();return true}
   if(t.dataset.pg){const[k,d]=t.dataset.pg.split('|');const p=PG[k]||(PG[k]={size:10,page:0});p.page+=+d;render();return true}
   if(t.dataset.rowEdit){const[c,id]=t.dataset.rowEdit.split('|');const rec=S[c].find(x=>x.id===id);if(!rec)return true;if(c==='romaneios')abrirRom(rec);else openForm(c,rec);return true}

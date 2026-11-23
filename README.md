@@ -27,6 +27,10 @@ Sistema de gestão da fazenda: uva enviada à cooperativa, prestação de contas
 5. No **GitHub**, ative **Settings → Pages → Deploy from a branch → main / (root)**.
 6. Abra o endereço. Na primeira vez, o sistema pede para criar o **primeiro administrador**. Isso só acontece uma vez.
 
+## Cadastros da Entrada da Fruta
+
+Produtor, Fazenda, Setor e Válvula são escolhidos de uma lista (sem digitar), para evitar erro. O botão **+** ao lado de cada um cadastra um novo na hora. Os cadastros ficam em **Packing** (Produtores, Fazendas, Válvulas) e os setores em **Cadastros**. A sequência da entrada, o número do romaneio (começa em 1) e a rastreabilidade são automáticos; no romaneio a rastreabilidade é escolhida da lista de entradas com saldo.
+
 ## Romaneios
 
 Na aba **Romaneios** ficam três telas:
