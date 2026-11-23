@@ -31,7 +31,7 @@ Sistema de gestão da fazenda: uva enviada à cooperativa, prestação de contas
 
 Na aba **Romaneios** ficam três telas:
 
-- **Entrada da fruta:** cada carga que entra no packing (sequência, produtor, atividade, parcela, válvula, rastreabilidade gerada sozinha, quantidade e kg). O saldo em kg baixa quando a rastreabilidade é usada num romaneio.
+- **Entrada da fruta:** cada carga que entra no packing: sequência, emissão, tipo, produtor/fazenda, atividade, setor, válvula, contentor, rastreabilidade (gerada sozinha) e os produtos (ex.: VITORIA VITACE, LINA, EXTRA 5KG) com quantidade e kg. O saldo em kg baixa quando a rastreabilidade é usada num romaneio; o status fica EM ABERTO ou BAIXADO.
 - **Romaneios:** cada carga com *Geral* (data de emissão, tipo Pallet ou Caixa, cliente/cooperativa, pedido, observação e quem lançou), *Produtos do romaneio* e *Deduções do romaneio*. O **Valor total** já sai com as deduções descontadas. Dá para imprimir cada romaneio em PDF e, se quiser, lançar o valor como conta a receber no Financeiro.
 - **Clientes / Cooperativas:** cadastro com importação da **CNH digital** (pessoa física) ou do **Cartão CNPJ** (pessoa jurídica) em PDF, e busca do CNPJ na Receita.
 - **Deduções Compra/Venda:** cadastro das deduções (Alimentação, Batedor, Caixa Extra, Caixa Lina, Caixa Valex, Caixa Vitace, Colheita, Embalação, Fiscal Colheita, Fiscal de Embalação e outras), com cálculo por caixa, valor fixo ou % dos produtos.

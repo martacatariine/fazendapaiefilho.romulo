@@ -372,8 +372,10 @@ const SCH={
   {k:'tipo',l:'Tipo',type:'select',opts:['Caixa','Pallet'],half:1},
   {k:'atividade',l:'Atividade',type:'select',opts:()=>{const a=[...S.atividades].map(x=>x.nome).sort();return a.length?a:['EMBALAGEM','COLHEITA']},half:1},
   {k:'produtor',l:'Produtor',req:1,list:()=>[...new Set([CFG.produtor,...S.envios.map(e=>e.produtor)].filter(Boolean))]},
-  {k:'talhao',l:'Parcela (latada)',type:'select',opts:()=>talOpts(),req:1,half:1},
+  {k:'fazenda',l:'Fazenda',half:1},
+  {k:'talhao',l:'Setor',type:'select',opts:()=>talOpts(),req:1,half:1},
   {k:'valvula',l:'Válvula / setor',half:1,list:()=>[...new Set(S.envios.map(e=>e.valvula).filter(Boolean))].sort(),hint:'Ex.: SETOR 06- VITORIA 744'},
+  {k:'contentor',l:'Contentor',half:1},
   {k:'rastreabilidade',l:'Rastreabilidade',hint:'Em branco, gera sozinho: R-ano-setor-diames-kg por caixa (ex.: R-26-S06-1011-5.00)'},
   {k:'caixas',l:'Quantidade',type:'num',req:1,half:1},
   {k:'kg',l:'Quantidade (kg)',type:'num',req:1,half:1},
@@ -1116,7 +1118,7 @@ impB.addEventListener('click',async e=>{const b=e.target.closest('[data-estorno]
   if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='Confirmar';return}
   const{col,id}=BX;const r=S[col].find(x=>x.id===id);const bid=b.dataset.estorno;const bx=bid==='leg'?[]:(r.baixas||[]).filter(x=>x.id!==bid);b.disabled=true;
   try{await put(col,{...r,...syncLegado(col,r,bx)});for(const ex of S.extrato.filter(x=>x.match===col+'/'+id+'/'+bid))await rawSet('extrato',{...ex,match:''});abrirBaixa(col,id)}catch(x){b.disabled=false}});
-imp.addEventListener('close',()=>{document.getElementById('impS').hidden=false;BX=null;ROM=null});
+imp.addEventListener('close',()=>{document.getElementById('impS').hidden=false;BX=null;ROM=null;ENT=null});
 async function rawSet(col,obj){const{id,...data}=obj;if(db){await grava(db.collection(fcol(col)).doc(id).set(data));return}
   const i=S[col].findIndex(x=>x.id===id);if(i>=0)S[col][i]={id,...data};else S[col].push({id,...data});saveLocal();schedule()}
 
@@ -1384,46 +1386,115 @@ async function camLigar(){if(CAM){camDesligar();focoLeitor();return}
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&CAM)camDesligar()});
 dlg.addEventListener('close',()=>{if(ROM&&ROM._wait)setTimeout(()=>{if(!ROM)return;if(romSig()!==ROM._sig)romSync();else ROM._wait=''},60)});
 /* ---------- entrada da fruta ---------- */
-const FE={ini:'',fim:'',prod:'',tal:'',val:'',st:'',ras:''},ABERTO=new Set();
-function rastreio(o){const ano=String(o.data||hoje()).slice(2,4),dm=String(o.data||hoje()).slice(8,10)+String(o.data||hoje()).slice(5,7);
-  const m=String(o.valvula||'').match(/S(?:ETOR)?\s*-?\s*(\d+)/i);const t=S.talhoes.find(x=>x.id===o.talhao);
-  const set=m?'S'+m[1].padStart(2,'0'):(String(t?.nome||'').match(/\d+/)?'S'+String(t.nome).match(/\d+/)[0].padStart(2,'0'):'S00');
-  const cx=pBR(o.caixas),kg=pBR(o.kg);return['R',ano,set,dm,cx>0&&kg>0?(kg/cx).toFixed(2):''].filter(Boolean).join('-')}
+const FE={ini:'',fim:'',prod:'',faz:'',set:'',val:'',st:'',ras:''};let ENT=null;
+const PROD_PADRAO=['UVA VITORIA VITACE - 5KG','UVA VITORIA LINA - 5KG','UVA VITORIA EXTRA - 5KG'];
+const num3=v=>(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3});
+const kgUn=p=>{const m=String(p||'').match(/(\d+(?:[.,]\d+)?)\s*KG/i);return m?pBR(m[1]):0};
+const entItens=e=>e.itens&&e.itens.length?e.itens:((+e.caixas||+e.kg)?[{produto:e.variedade?'UVA '+String(e.variedade).toUpperCase():'UVA',qtd:+e.caixas||0,kg:+e.kg||0}]:[]);
+function rastreio(o){const d=String(o.data||hoje()),ano=d.slice(2,4),dm=d.slice(8,10)+d.slice(5,7);const t=S.talhoes.find(x=>x.id===o.talhao);
+  const dt=String(t?.nome||'').match(/\d+/),m=String(o.valvula||'').match(/S(?:ETOR)?\s*-?\s*(\d+)/i);
+  const set='S'+String(dt?dt[0]:m?m[1]:'0').padStart(2,'0');const cx=pBR(o.caixas),kg=pBR(o.kg);
+  return['R',ano,set,dm,cx>0&&kg>0?(kg/cx).toFixed(2):''].filter(Boolean).join('-')}
 const entUsado=(e,semRom)=>!e.rastreabilidade?0:sum(S.romaneios.filter(r=>r.id!==semRom).flatMap(r=>r.itens||[]).filter(i=>String(i.rastreio||'').toUpperCase()===String(e.rastreabilidade).toUpperCase()),i=>+i.peso||0);
 const entSaldo=(e,semRom)=>(+e.kg||0)-entUsado(e,semRom);
 function entFiltro(){return S.envios.filter(e=>{const d=e.data||'';if(!FE.ini&&!FE.fim&&!inAno(d))return false;if(FE.ini&&d<FE.ini)return false;if(FE.fim&&d>FE.fim)return false;
-  if(FE.prod&&e.produtor!==FE.prod)return false;if(FE.tal&&e.talhao!==FE.tal)return false;if(FE.val&&e.valvula!==FE.val)return false;
-  const sd=entSaldo(e);if(FE.st==='saldo'&&!(sd>0.0001))return false;if(FE.st==='zerado'&&sd>0.0001)return false;
+  if(FE.prod&&e.produtor!==FE.prod)return false;if(FE.faz&&(e.fazenda||'')!==FE.faz)return false;if(FE.set&&e.talhao!==FE.set)return false;if(FE.val&&e.valvula!==FE.val)return false;
+  const sd=entSaldo(e);if(FE.st==='aberto'&&!(sd>0.0001))return false;if(FE.st==='baixado'&&sd>0.0001)return false;
   if(FE.ras&&!String(e.rastreabilidade||'').toUpperCase().includes(FE.ras.toUpperCase()))return false;return true})
   .sort((a,b)=>String(b.data).localeCompare(String(a.data))||(+b.sequencia||0)-(+a.sequencia||0))}
 function entLista(){const rows=entFiltro(),P=paginar('ent',rows);const tkg=sum(rows,e=>+e.kg||0),tcx=sum(rows,e=>+e.caixas||0),tsd=sum(rows,e=>entSaldo(e));
   const uniq=a=>[...new Set(a.filter(Boolean))].sort();
-  const sel=(id,l,opts,v)=>`<label>${l}<select id="${id}">${optsH([['','Todos'],...opts],v)}</select></label>`;
+  const sel=(id,l,opts,v,todos='Todos')=>`<label>${l}<select id="${id}">${optsH([['',todos],...opts],v)}</select></label>`;
   const filtros=`<div class="ent-f nf-opts"><label>Data início<input type="date" id="fe_ini" value="${esc(FE.ini)}"></label><label>Data fim<input type="date" id="fe_fim" value="${esc(FE.fim)}"></label>
-   ${sel('fe_prod','Produtor',uniq(S.envios.map(e=>e.produtor)).map(x=>[x,x]),FE.prod)}${sel('fe_tal','Parcela (latada)',S.talhoes.map(t=>[t.id,t.nome]),FE.tal)}
-   ${sel('fe_val','Válvula',uniq(S.envios.map(e=>e.valvula)).map(x=>[x,x]),FE.val)}${sel('fe_st','Status',[['saldo','Com saldo'],['zerado','Sem saldo']],FE.st)}
+   ${sel('fe_prod','Produtor',uniq(S.envios.map(e=>e.produtor)).map(x=>[x,x]),FE.prod)}${sel('fe_faz','Fazenda',uniq(S.envios.map(e=>e.fazenda)).map(x=>[x,x]),FE.faz)}
+   ${sel('fe_set','Setor',S.talhoes.map(t=>[t.id,t.nome]),FE.set)}${sel('fe_val','Válvula',uniq(S.envios.map(e=>e.valvula)).map(x=>[x,x]),FE.val)}
+   ${sel('fe_st','Status',[['aberto','EM ABERTO'],['baixado','BAIXADO']],FE.st,'TODOS')}
    <label>Rastreabilidade<input id="fe_ras" value="${esc(FE.ras)}" placeholder="R-26-…"></label><div class="ent-go"><button type="button" class="btn" data-ent-go>Pesquisar</button>${Object.values(FE).some(Boolean)?'<button type="button" class="btn sm" data-ent-limpa>Limpar</button>':''}</div></div>`;
-  const tr=e=>{const sd=entSaldo(e),ab=ABERTO.has(e.id);return`<tr><td class="n">${esc(e.sequencia||'—')}${ex(e)}</td><td>${fd(e.data)}</td><td>${esc(e.tipo||'Caixa')}</td><td class="wrap">${esc(e.produtor||'—')}</td><td>${esc(e.atividade||'—')}</td><td>${esc(tNome(e.talhao))}</td><td class="wrap">${esc(e.valvula||'—')}</td><td class="mono">${esc(e.rastreabilidade||'—')}</td><td class="n">${int(e.caixas)}</td><td class="n">${num(+e.kg||0)}</td><td class="n${sd<-0.0001?' neg':''}">${num(sd)}</td>
-   <td class="n"><button type="button" class="ico" data-ent-det="${e.id}" aria-expanded="${ab}" title="Detalhes" aria-label="Detalhes">${ab?'−':'+'}</button></td><td class="n">${acoes('envios',e.id)}</td></tr>`
-   +(ab?`<tr class="det"><td colspan="13"><div class="det-g"><span><b>Variedade</b> ${esc(e.variedade||'—')}</span><span><b>Mercado</b> ${esc(e.mercado||'—')}</span><span><b>Semana</b> ${e.semana||semanaISO(e.data)||'—'}</span><span><b>Kg por caixa</b> ${+e.caixas?num(e.kg/e.caixas):'—'}</span><span><b>Embalagem</b> ${esc(e.embalagem||'—')}</span><span><b>Romaneio / ticket</b> ${esc(e.romaneio||'—')}</span><span><b>Usado em romaneios</b> ${num(entUsado(e))} kg</span>${e.obs?`<span><b>Obs.</b> ${esc(e.obs)}</span>`:''}</div></td></tr>`:'')};
-  return`<div class="sec-h"><div><h2>Entrada da Fruta</h2><p>Cada carga que entra no packing, por parcela e válvula. O saldo (kg) baixa quando a rastreabilidade é usada num romaneio.</p></div><div class="btns"><button class="btn ok-btn" data-ent-pdf>Imprimir</button>${canWrite?'<button class="btn pri" data-new="envios">+ Novo</button>':''}</div></div>
-  ${filtros}<div class="kpis">${kpi('Entradas',rows.length)}${kpi('Quantidade',int(tcx),'caixas')}${kpi('Quantidade (kg)',num(tkg))}${kpi('Saldo (kg)',num(tsd))}</div>
-  ${rows.length?`<div class="tbl"><table class="ent-t"><thead><tr><th class="n">Seq.</th><th>Emissão</th><th>Tipo</th><th>Produtor</th><th>Atividade</th><th>Parcela</th><th>Válvula</th><th>Rastreabilidade</th><th class="n">Quantidade</th><th class="n">Qtd. (kg)</th><th class="n">Saldo (kg)</th><th class="n">Det.</th><th class="n">Ações</th></tr></thead><tbody>${P.vis.map(tr).join('')}</tbody>
-   <tfoot><tr><td>Total</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="n">${int(tcx)}</td><td class="n">${num(tkg)}</td><td class="n">${num(tsd)}</td><td></td><td></td></tr></tfoot></table></div>${P.html}`
+  const st=sd=>sd>0.0001?'<span class="pill warn">Em aberto</span>':'<span class="pill ok">Baixado</span>';
+  const tr=e=>{const sd=entSaldo(e);return`<tr><td class="n">${esc(e.sequencia||'—')}${ex(e)}</td><td>${fd(e.data)}</td><td>${esc(e.tipo||'Caixa')}</td><td class="wrap">${esc(e.produtor||'—')}${e.fazenda?`<br><span class="note">${esc(e.fazenda)}</span>`:''}</td><td>${esc(e.atividade||'—')}</td><td>${esc(tNome(e.talhao))}</td><td class="wrap">${esc(e.valvula||'—')}</td><td class="mono">${esc(e.rastreabilidade||'—')}</td><td class="n">${int(e.caixas)}</td><td class="n">${num3(e.kg)}</td><td class="n${sd<-0.0001?' neg':''}">${num3(sd)}<br>${st(sd)}</td>
+   <td class="n"><button type="button" class="ico" data-ent-det="${e.id}" title="Detalhes" aria-label="Ver produtos da entrada">${ICO.lista}</button></td><td>${esc(e.contentor||'—')}</td><td class="n">${acoes('envios',e.id)}</td></tr>`};
+  return`<div class="sec-h"><div><h2>Entrada da Fruta</h2><p>Cada carga que entra no packing, por setor e válvula. O saldo (kg) baixa quando a rastreabilidade é usada num romaneio.</p></div><div class="btns"><button class="btn ok-btn" data-ent-pdf>Imprimir</button>${canWrite?'<button class="btn pri" data-new="envios">+ Novo</button>':''}</div></div>
+  ${filtros}<div class="kpis">${kpi('Entradas',rows.length)}${kpi('Quantidade',int(tcx),'caixas')}${kpi('Quantidade (kg)',num3(tkg))}${kpi('Saldo (kg)',num3(tsd),rows.filter(e=>entSaldo(e)>0.0001).length+' em aberto')}</div>
+  ${rows.length?`<div class="tbl"><table class="ent-t"><thead><tr><th class="n">Seq.</th><th>Emissão</th><th>Tipo</th><th>Produtor / fazenda</th><th>Atividade</th><th>Setor</th><th>Válvula</th><th>Rastreabilidade</th><th class="n">Qtd. (cx)</th><th class="n">Qtd. (kg)</th><th class="n">Saldo (kg)</th><th class="n">Detalhes</th><th>Contentor</th><th class="n">Ações</th></tr></thead><tbody>${P.vis.map(tr).join('')}</tbody>
+   <tfoot><tr><td>Total</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="n">${int(tcx)}</td><td class="n">${num3(tkg)}</td><td class="n">${num3(tsd)}</td><td></td><td></td><td></td></tr></tfoot></table></div>${P.html}`
   :`<div class="tbl"><div class="empty">Nenhuma entrada encontrada.${canWrite?' <button class="btn sm" data-new="envios">Lançar a primeira</button>':''}</div></div>`}`}
-function entLer(){const g=id=>(document.getElementById(id)||{}).value||'';Object.assign(FE,{ini:g('fe_ini'),fim:g('fe_fim'),prod:g('fe_prod'),tal:g('fe_tal'),val:g('fe_val'),st:g('fe_st'),ras:g('fe_ras').trim()});(PG.ent||{}).page=0}
-async function entPDF(){const rows=entFiltro();const f=[FE.ini&&'de '+fd(FE.ini),FE.fim&&'até '+fd(FE.fim),FE.prod,FE.tal&&tNome(FE.tal),FE.val,FE.st==='saldo'?'com saldo':FE.st==='zerado'?'sem saldo':'',FE.ras].filter(Boolean).join(' · ');
-  await gerarPDF({titulo:'Entrada da Fruta',kpis:[['Filtros',f||'Nenhum'],['Entradas',String(rows.length)],['Quantidade',int(sum(rows,e=>+e.caixas||0))+' caixas'],['Quantidade (kg)',num(sum(rows,e=>+e.kg||0))],['Saldo (kg)',num(sum(rows,e=>entSaldo(e)))]],
-   secoes:[{titulo:'Entradas',cols:[C('Seq.'),C('Emissão','date'),C('Tipo'),C('Produtor'),C('Atividade'),C('Parcela'),C('Válvula'),C('Rastreabilidade'),C('Quantidade','int'),C('Qtd. (kg)','num'),C('Saldo (kg)','num')],
-    rows:rows.map(e=>[e.sequencia||'',e.data,e.tipo||'Caixa',e.produtor||'',e.atividade||'',tNome(e.talhao),e.valvula||'',e.rastreabilidade||'',+e.caixas||0,+e.kg||0,entSaldo(e)])}]})}
-function entClick(t){if(t.hasAttribute('data-ent-go')){entLer();render();return true}
+function entLer(){const g=id=>(document.getElementById(id)||{}).value||'';Object.assign(FE,{ini:g('fe_ini'),fim:g('fe_fim'),prod:g('fe_prod'),faz:g('fe_faz'),set:g('fe_set'),val:g('fe_val'),st:g('fe_st'),ras:g('fe_ras').trim()});(PG.ent||{}).page=0}
+async function entPDF(){const rows=entFiltro();const f=[FE.ini&&'de '+fd(FE.ini),FE.fim&&'até '+fd(FE.fim),FE.prod,FE.faz,FE.set&&tNome(FE.set),FE.val,FE.st==='aberto'?'em aberto':FE.st==='baixado'?'baixado':'',FE.ras].filter(Boolean).join(' · ');
+  await gerarPDF({titulo:'Entrada da Fruta',kpis:[['Filtros',f||'Nenhum'],['Entradas',String(rows.length)],['Quantidade',int(sum(rows,e=>+e.caixas||0))+' caixas'],['Quantidade (kg)',num3(sum(rows,e=>+e.kg||0))],['Saldo (kg)',num3(sum(rows,e=>entSaldo(e)))]],
+   secoes:[{titulo:'Entradas',cols:[C('Seq.'),C('Emissão','date'),C('Tipo'),C('Produtor'),C('Atividade'),C('Setor'),C('Válvula'),C('Rastreabilidade'),C('Qtd. (cx)','int'),C('Qtd. (kg)','num'),C('Saldo (kg)','num'),C('Contentor')],
+    rows:rows.map(e=>[e.sequencia||'',e.data,e.tipo||'Caixa',e.produtor||'',e.atividade||'',tNome(e.talhao),e.valvula||'',e.rastreabilidade||'',+e.caixas||0,+e.kg||0,entSaldo(e),e.contentor||''])},
+   {titulo:'Produtos das entradas',cols:[C('Seq.'),C('Rastreabilidade'),C('Produto'),C('Quantidade','num'),C('Quantidade (kg)','num')],rows:rows.flatMap(e=>entItens(e).map(i=>[e.sequencia||'',e.rastreabilidade||'',i.produto,+i.qtd||0,+i.kg||0]))}]})}
+function abrirEntDet(id){const e=S.envios.find(x=>x.id===id);if(!e)return;impF.dataset.mode='entdet';document.getElementById('impT').textContent='Produtos da Entrada da Fruta';document.getElementById('impS').hidden=true;document.getElementById('impErr').textContent='';
+  const it=entItens(e),un=e.tipo==='Pallet'?'PL':'CX';
+  impB.innerHTML=`<p class="note">Entrada nº ${esc(e.sequencia||'—')} · ${fd(e.data)} · ${esc(e.produtor||'')} · ${esc(tNome(e.talhao))}${e.valvula?' · Válvula '+esc(e.valvula):''}${e.contentor?' · Contentor '+esc(e.contentor):''}<br>${esc(e.rastreabilidade||'')}</p>
+   <div class="tbl"><table><thead><tr><th>Produto</th><th class="n">Quantidade</th><th class="n">Quantidade Kg</th></tr></thead><tbody>${it.length?it.map(i=>`<tr><td>${esc(i.produto)} <span class="note">Unid: ${un}</span></td><td class="n">${num3(i.qtd)}</td><td class="n">${num3(i.kg)}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">Sem produtos.</td></tr>'}</tbody>
+   ${it.length>1?`<tfoot><tr><td>Total</td><td class="n">${num3(sum(it,i=>+i.qtd||0))}</td><td class="n">${num3(sum(it,i=>+i.kg||0))}</td></tr></tfoot>`:''}</table></div>
+   <p class="note">Saldo: <b>${num3(entSaldo(e))} kg</b> · usado em romaneios: ${num3(entUsado(e))} kg</p>`;imp.showModal()}
+function abrirEnt(rec){const b=rec?JSON.parse(JSON.stringify(rec)):{sequencia:'',data:hoje(),tipo:'Caixa',atividade:(S.atividades.find(a=>a.nome==='EMBALAGEM')||{}).nome||'EMBALAGEM',
+   produtor:([...S.envios].sort(byDate('data'))[0]||{}).produtor||CFG.produtor||'',fazenda:([...S.envios].sort(byDate('data'))[0]||{}).fazenda||CFG.fazenda||'',talhao:'',valvula:'',contentor:'',rastreabilidade:'',mercado:'Externo',romaneio:'',embalagem:'',obs:''};
+  b.itens=entItens(b).map(i=>({produto:i.produto||'',qtd:vIn(i.qtd),kg:vIn(i.kg),_auto:false}));if(!b.itens.length)b.itens=[{produto:'',qtd:'',kg:'',_auto:true}];
+  ENT=b;impF.dataset.mode='ent';const s=document.getElementById('impS');s.textContent='Salvar';s.disabled=!canWrite;s.hidden=!canWrite;document.getElementById('impErr').textContent='';renderEnt();imp.showModal()}
+function renderEnt(){const r=ENT,ro=canWrite?'':' disabled';document.getElementById('impT').textContent=r.id?'Entrada da fruta nº '+(r.sequencia||''):'Nova entrada da fruta';
+  const atv=[...new Set([...S.atividades.map(a=>a.nome),r.atividade].filter(Boolean))].sort();
+  const L=(id,arr)=>`<datalist id="${id}">${[...new Set(arr.filter(Boolean))].sort().map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`;
+  const c=r.talhao&&typeof carencias==='function'?carencias(r.data).find(x=>x.t.id===r.talhao):null;
+  const tc=sum(r.itens,i=>nv(i.qtd)),tk=sum(r.itens,i=>nv(i.kg));
+  impB.innerHTML=`<div class="rom-b">${L('entProdutorL',[CFG.produtor,...S.envios.map(e=>e.produtor)])}${L('entFazL',[CFG.fazenda,...S.envios.map(e=>e.fazenda)])}${L('entValL',S.envios.map(e=>e.valvula))}${L('entContL',S.envios.map(e=>e.contentor))}${L('entProdL',[...PROD_PADRAO,...S.envios.flatMap(e=>(e.itens||[]).map(i=>i.produto))])}${L('entEmbL',itensEmb())}
+  <div class="nf-opts">
+   <label>Sequência<input data-ek="sequencia" value="${esc(r.sequencia)}" placeholder="automática"${ro}></label>
+   <label>Emissão *<input type="date" data-ek="data" value="${esc(r.data)}"${ro}></label>
+   <label>Tipo<select data-ek="tipo"${ro}>${optsH(['Caixa','Pallet'],r.tipo)}</select></label>
+   <label>Atividade<select data-ek="atividade"${ro}>${optsH(atv.length?atv:['EMBALAGEM','COLHEITA'],r.atividade)}</select></label>
+   <label>Produtor *<input data-ek="produtor" list="entProdutorL" value="${esc(r.produtor)}"${ro}></label>
+   <label>Fazenda<input data-ek="fazenda" list="entFazL" value="${esc(r.fazenda)}"${ro}></label>
+   <label>Setor *<select data-ek="talhao"${ro}>${optsH(talOpts('— escolha —'),r.talhao)}</select></label>
+   <label>Válvula<input data-ek="valvula" list="entValL" value="${esc(r.valvula)}"${ro}></label>
+   <label>Contentor<input data-ek="contentor" list="entContL" value="${esc(r.contentor)}"${ro}></label>
+   <label>Rastreabilidade<input data-ek="rastreabilidade" value="${esc(r.rastreabilidade)}" placeholder="gerada ao salvar"${ro}></label>
+   <label>Mercado<select data-ek="mercado"${ro}>${optsH(['Externo','Interno'],r.mercado)}</select></label>
+   <label>Nº romaneio / ticket<input data-ek="romaneio" value="${esc(r.romaneio)}"${ro}></label>
+   <label class="span-all">Embalagem usada (as caixas saem do estoque de embalagens)<input data-ek="embalagem" list="entEmbL" value="${esc(r.embalagem)}"${ro}></label>
+  </div>${c?`<p class="neg"><b>Atenção: ${esc(c.t.nome)} está em carência até ${fd(c.lib)}</b> (pulverização de ${fd(c.p.data)}).</p>`:''}
+  <h3>Produtos da entrada</h3>
+  <div class="tbl"><table><thead><tr><th>Produto</th><th class="n">Quantidade (cx)</th><th class="n">Quantidade (kg)</th><th></th></tr></thead><tbody>${r.itens.map((i,n)=>`<tr><td><input class="cell-in" data-ei="${n}" data-ek="produto" list="entProdL" value="${esc(i.produto)}" aria-label="Produto" placeholder="Ex.: UVA VITORIA EXTRA - 5KG"${ro}></td><td class="n"><input class="cell-in num" data-ei="${n}" data-ek="qtd" inputmode="decimal" value="${esc(i.qtd)}" aria-label="Quantidade"${ro}></td><td class="n"><input class="cell-in num" data-ei="${n}" data-ek="kg" inputmode="decimal" value="${esc(i.kg)}" aria-label="Quantidade em kg"${ro}></td><td>${canWrite?`<button type="button" class="ico del" data-ent-rm="${n}" title="Remover" aria-label="Remover produto">${ICO.del}</button>`:''}</td></tr>`).join('')}</tbody>
+  <tfoot><tr><td>Total</td><td class="n" id="entTc">${num(tc)}</td><td class="n" id="entTk">${num(tk)}</td><td></td></tr></tfoot></table></div>
+  ${canWrite?'<div class="btns"><button type="button" class="btn" data-ent-add>+ Adicionar produto</button></div>':''}
+  <p class="note">Quando o nome do produto tem o peso da caixa (ex.: "5KG"), os quilos se calculam sozinhos pela quantidade.</p>
+  <div class="nf-opts"><label class="span-all">Observação<textarea data-ek="obs" rows="2"${ro}>${esc(r.obs)}</textarea></label></div></div>`}
+function entInput(e){if(impF.dataset.mode!=='ent'||!ENT)return;const el=e.target,k=el.dataset&&el.dataset.ek;if(!k)return;
+  if(el.dataset.ei!=null){const n=el.dataset.ei,i=ENT.itens[+n];if(!i)return;i[k]=el.value;if(k==='kg')i._auto=false;
+    if((k==='qtd'||k==='produto')&&(i._auto||!String(i.kg).trim())){const u=kgUn(i.produto);if(u&&nv(i.qtd)){i.kg=vIn(+(nv(i.qtd)*u).toFixed(3));i._auto=true;const kin=impB.querySelector(`[data-ei="${n}"][data-ek="kg"]`);if(kin)kin.value=i.kg}}
+    const set=(id,v)=>{const x=document.getElementById(id);if(x)x.textContent=v};set('entTc',num(sum(ENT.itens,i=>nv(i.qtd))));set('entTk',num(sum(ENT.itens,i=>nv(i.kg))));return}
+  ENT[k]=el.value;if(e.type==='change'&&(k==='data'||k==='talhao'))renderEnt()}
+impB.addEventListener('input',entInput);impB.addEventListener('change',entInput);
+impB.addEventListener('click',e=>{if(impF.dataset.mode!=='ent'||!ENT)return;const b=e.target.closest('[data-ent-add],[data-ent-rm]');if(!b)return;
+  if(b.hasAttribute('data-ent-add'))ENT.itens.push({produto:'',qtd:'',kg:'',_auto:true});else{ENT.itens.splice(+b.dataset.entRm,1);if(!ENT.itens.length)ENT.itens.push({produto:'',qtd:'',kg:'',_auto:true})}renderEnt()});
+async function salvarEnt(err){const r=ENT,msg=m=>{err.textContent=m;return false};
+  if(!r.data)return msg('Informe a emissão.');if(!String(r.produtor||'').trim())return msg('Informe o produtor.');if(!r.talhao)return msg('Escolha o setor.');
+  const itens=r.itens.filter(i=>String(i.produto||'').trim()||nv(i.qtd)||nv(i.kg)).map(i=>({produto:String(i.produto||'').trim().toUpperCase(),qtd:nv(i.qtd),kg:nv(i.kg)}));
+  if(!itens.length)return msg('Lance pelo menos um produto.');if(itens.some(i=>!i.produto))return msg('Informe o nome do produto em todas as linhas.');
+  if(itens.some(i=>!(i.qtd>0)||!(i.kg>0)))return msg('Preencha a quantidade e os kg de cada produto.');
+  const t=S.talhoes.find(x=>x.id===r.talhao);
+  const o={sequencia:String(r.sequencia||'').trim()||String(Math.max(0,...S.envios.map(x=>+x.sequencia||0))+1),data:r.data,tipo:r.tipo||'Caixa',atividade:r.atividade||'',
+    produtor:String(r.produtor).trim().toUpperCase(),fazenda:String(r.fazenda||'').trim(),talhao:r.talhao,valvula:String(r.valvula||'').trim().toUpperCase(),contentor:String(r.contentor||'').trim().toUpperCase(),
+    mercado:r.mercado||'Externo',romaneio:String(r.romaneio||'').trim(),embalagem:String(r.embalagem||'').trim(),obs:r.obs||'',itens,caixas:sum(itens,i=>i.qtd),kg:sum(itens,i=>i.kg),variedade:t?.variedade||'',semana:semanaISO(r.data)};
+  if(S.envios.some(x=>x.id!==r.id&&String(x.sequencia)===o.sequencia))return msg('Já existe a entrada de sequência '+o.sequencia+'.');
+  o.rastreabilidade=String(r.rastreabilidade||'').trim().toUpperCase()||rastreio(o);
+  const keep={};['loteColheita','exemplo'].forEach(k=>{if(r[k]!=null)keep[k]=r[k]});
+  await put('envios',{id:r.id||null,...keep,...o});ENT=null;showBanner('Entrada nº '+o.sequencia+' salva: '+int(o.caixas)+' caixas, '+num(o.kg)+' kg.');return true}
+function entClick(t,e){
+  if(t.dataset.new==='envios'){if(!S.talhoes.length){view='talhoes';render();openForm('talhoes');return true}abrirEnt(null);return true}
+  if(t.dataset.edit==='envios'){if(e&&e.target.closest('button'))return true;abrirEnt(S.envios.find(r=>r.id===t.dataset.id));return true}
+  if(t.dataset.rowEdit&&t.dataset.rowEdit.startsWith('envios|')){abrirEnt(S.envios.find(r=>r.id===t.dataset.rowEdit.split('|')[1]));return true}
+  if(t.hasAttribute('data-ent-go')){entLer();render();return true}
   if(t.hasAttribute('data-ent-limpa')){Object.keys(FE).forEach(k=>FE[k]='');render();return true}
-  if(t.dataset.entDet){const id=t.dataset.entDet;ABERTO.has(id)?ABERTO.delete(id):ABERTO.add(id);render();return true}
+  if(t.dataset.entDet){abrirEntDet(t.dataset.entDet);return true}
   if(t.hasAttribute('data-ent-pdf')){entPDF().catch(x=>showBanner('Não consegui gerar o PDF: '+(x.message||x.code)));return true}return false}
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='fe_ras'){e.preventDefault();entLer();render()}});
 /* ---------- romaneio, clientes e deduções ---------- */
 let romTab='lista',ROM=null;const BUSCA={rom:'',cli:'',ded:'',atv:''},PG={};
 const ICO={edit:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+ lista:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>',
  del:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
  pdf:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>'};
 const ATV_PADRAO=['COLHEITA','EMBALAGEM'];
@@ -1545,7 +1616,7 @@ async function cadPDF(col){if(col==='atividades'){await gerarPDF({titulo:'Ativid
     :{titulo:'Clientes / Cooperativas',semPeriodo:1,secoes:[{titulo:'Cadastro',cols:[C('Nome / Razão social'),C('Tipo'),C('CPF / CNPJ'),C('Telefone'),C('Município / UF')],rows:rows.map(r=>[r.nome,r.tipoPessoa==='PF'?'Física':'Jurídica',r.doc||'',r.telefone||'',[r.municipio,r.uf].filter(Boolean).join(' / ')])}]})}
 async function dedPadrao(b){b.disabled=true;for(const n of DED_PADRAO){if(!S.deducoes.some(d=>String(d.nome).toUpperCase()===n))await put('deducoes',{id:null,nome:n,tipo:'Venda',forma:'Por caixa',valorPadrao:0})}showBanner('Deduções padrão cadastradas. Ajuste o cálculo e o valor de cada uma pelo lápis.')}
 function romClick(t,e){
-  if(entClick(t))return true;
+  if(entClick(t,e))return true;
   if(t.dataset.romtab){romTab=t.dataset.romtab;render();return true}
   if(t.hasAttribute('data-rom-novo')){abrirRom(null);return true}
   if(t.dataset.romPdf){romPDF(t.dataset.romPdf).catch(x=>showBanner('Não consegui gerar o PDF: '+(x.message||x.code)));return true}
@@ -1600,7 +1671,7 @@ async function importarDoc(kind,file){const msg=document.getElementById('docMsg'
 function docBar(){if(!canWrite)return;document.getElementById('dlgB').insertAdjacentHTML('afterbegin',`<div class="fld doc-bar"><b>Preencher com documento</b><div class="btns"><label class="btn sm" for="docCNH">Importar CNH digital (PF)</label><label class="btn sm" for="docCNPJ">Importar Cartão CNPJ (PJ)</label><button type="button" class="btn sm" id="cnpjBusca">Buscar CNPJ na Receita</button></div><span class="hint" id="docMsg">CNH digital: PDF exportado do app Carteira Digital de Trânsito. Cartão CNPJ: PDF do site da Receita Federal. Os dados vão para os campos abaixo; confira antes de salvar.</span><input type="file" id="docCNH" accept="application/pdf,.pdf" hidden><input type="file" id="docCNPJ" accept="application/pdf,.pdf" hidden></div>`)}
 document.getElementById('dlgB').addEventListener('change',e=>{if(e.target.id==='docCNH'||e.target.id==='docCNPJ'){const f=e.target.files[0];e.target.value='';importarDoc(e.target.id==='docCNH'?'cnh':'cnpj',f)}});
 document.getElementById('dlgB').addEventListener('click',e=>{if(e.target.id==='cnpjBusca')buscarCNPJ()});
-const MODOS={rom:salvarRom,baixa:salvarBaixa,ofx:salvarOFX,restore:salvarRestore,etq:gerarEtiquetas,qrver:async()=>true};
+const MODOS={ent:salvarEnt,entdet:async()=>true,rom:salvarRom,baixa:salvarBaixa,ofx:salvarOFX,restore:salvarRestore,etq:gerarEtiquetas,qrver:async()=>true};
 document.getElementById('ofxIn').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
   try{abrirOFX(parseOFX(await f.text()),f.name)}catch(x){showBanner('Extrato não importado: '+x.message)}});
 document.getElementById('bkIn').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
