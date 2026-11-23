@@ -35,6 +35,10 @@ Na aba **Romaneios** ficam três telas:
 - **Clientes / Cooperativas:** cadastro com importação da **CNH digital** (pessoa física) ou do **Cartão CNPJ** (pessoa jurídica) em PDF, e busca do CNPJ na Receita.
 - **Deduções Compra/Venda:** cadastro das deduções (Alimentação, Batedor, Caixa Extra, Caixa Lina, Caixa Valex, Caixa Vitace, Colheita, Embalação, Fiscal Colheita, Fiscal de Embalação e outras), com cálculo por caixa, valor fixo ou % dos produtos.
 
+## Packing
+
+Na aba **Packing** fica o grupo **PACKING PAI E FILHO** com o cadastro **Atividade do Packing** (COLHEITA, EMBALAGEM e outras): + Novo, lápis para editar, lixeira para excluir, pesquisa e Imprimir.
+
 ## Perfis
 
 - **Administrador:** lança, edita, exclui e cadastra usuários.
