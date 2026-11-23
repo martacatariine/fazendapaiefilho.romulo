@@ -31,6 +31,10 @@ Sistema de gestão da fazenda: uva enviada à cooperativa, prestação de contas
 
 Produtor, Fazenda, Setor e Válvula são escolhidos de uma lista (sem digitar), para evitar erro. O botão **+** ao lado de cada um cadastra um novo na hora. Os cadastros ficam em **Packing** (Produtores, Fazendas, Válvulas) e os setores em **Cadastros**. A sequência da entrada, o número do romaneio (começa em 1) e a rastreabilidade são automáticos; no romaneio a rastreabilidade é escolhida da lista de entradas com saldo.
 
+## Relatório da Entrada da Fruta
+
+O botão **Imprimir** da Entrada da Fruta abre o relatório: período, ano, layout (completo ou resumido), opção (ambos, em aberto, baixado), cálculo de sobrepeso, escolha de entradas, filtros por produtor, fazenda/lote, setor, válvula e variedade, e as opções de imprimir produtos, romaneios referenciados, resumo por produto, resumo por variedade ou apenas resumos. Sai em **PDF** ou **Excel**.
+
 ## Romaneios
 
 Na aba **Romaneios** ficam três telas:

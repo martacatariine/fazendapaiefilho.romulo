@@ -191,6 +191,8 @@ dialog.wide{width:min(980px,calc(100vw - 24px))}
 .qr-cam video{display:block;width:100%;max-height:55vh;object-fit:cover}
 .qr-cam::after{content:"";position:absolute;inset:18% 22%;border:3px solid rgba(255,255,255,.85);border-radius:14px;pointer-events:none}
 /* romaneio */
+.rel-chk{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 18px;margin-top:14px}.rel-chk .chk{display:flex;gap:8px;align-items:center;font-weight:600;font-size:.92rem}.rel-chk input{width:18px;height:18px;accent-color:var(--grape)}
+.rom-b select[multiple]{height:auto;padding:4px}
 .btn.mais{flex:none;min-width:40px;padding-left:0;padding-right:0;font-size:1.1rem;font-weight:700}.ent-f .row{display:flex;gap:6px}.ent-f .row select{flex:1;min-width:0}
 .ent-f{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:4px 0 14px;padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 .ent-f input,.ent-f select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-weight:400;width:100%;min-width:0;box-sizing:border-box}
@@ -1134,7 +1136,7 @@ impB.addEventListener('click',async e=>{const b=e.target.closest('[data-estorno]
   if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='Confirmar';return}
   const{col,id}=BX;const r=S[col].find(x=>x.id===id);const bid=b.dataset.estorno;const bx=bid==='leg'?[]:(r.baixas||[]).filter(x=>x.id!==bid);b.disabled=true;
   try{await put(col,{...r,...syncLegado(col,r,bx)});for(const ex of S.extrato.filter(x=>x.match===col+'/'+id+'/'+bid))await rawSet('extrato',{...ex,match:''});abrirBaixa(col,id)}catch(x){b.disabled=false}});
-imp.addEventListener('close',()=>{document.getElementById('impS').hidden=false;BX=null;ROM=null;ENT=null});
+imp.addEventListener('close',()=>{const x=document.getElementById('impX');if(x)x.remove();document.getElementById('impS').hidden=false;BX=null;ROM=null;ENT=null});
 async function rawSet(col,obj){const{id,...data}=obj;if(db){await grava(db.collection(fcol(col)).doc(id).set(data));return}
   const i=S[col].findIndex(x=>x.id===id);if(i>=0)S[col][i]={id,...data};else S[col].push({id,...data});saveLocal();schedule()}
 
@@ -1402,7 +1404,7 @@ async function camLigar(){if(CAM){camDesligar();focoLeitor();return}
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&CAM)camDesligar()});
 dlg.addEventListener('close',()=>{if(ROM&&ROM._wait)setTimeout(()=>{if(!ROM)return;if(romSig()!==ROM._sig)romSync();else ROM._wait=''},60)});
 /* ---------- entrada da fruta ---------- */
-const FE={ini:'',fim:'',prod:'',faz:'',set:'',val:'',st:'',ras:''};let ENT=null;
+const FE={ini:'',fim:'',prod:'',faz:'',set:'',var:'',st:'',ras:''};let ENT=null;
 const nomesCad=(col,extra=[])=>[...new Set([...S[col].map(x=>x.nome),...extra].filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
 const valvOpts=tal=>nomesCad('valvulas').filter(n=>!tal||S.valvulas.some(v=>v.nome===n&&(!v.talhao||v.talhao===tal)));
 const maisBtn=(col,alvo,tit)=>canWrite?`<button type="button" class="btn sm mais" data-quick="${col}|${alvo}" title="Cadastrar ${tit}" aria-label="Cadastrar ${tit}">+</button>`:'';
@@ -1425,7 +1427,7 @@ function rastreio(o){const d=String(o.data||hoje()),ano=d.slice(2,4),dm=d.slice(
 const entUsado=(e,semRom)=>!e.rastreabilidade?0:sum(S.romaneios.filter(r=>r.id!==semRom).flatMap(r=>r.itens||[]).filter(i=>String(i.rastreio||'').toUpperCase()===String(e.rastreabilidade).toUpperCase()),i=>+i.peso||0);
 const entSaldo=(e,semRom)=>(+e.kg||0)-entUsado(e,semRom);
 function entFiltro(){return S.envios.filter(e=>{const d=e.data||'';if(!FE.ini&&!FE.fim&&!inAno(d))return false;if(FE.ini&&d<FE.ini)return false;if(FE.fim&&d>FE.fim)return false;
-  if(FE.prod&&e.produtor!==FE.prod)return false;if(FE.faz&&(e.fazenda||'')!==FE.faz)return false;if(FE.set&&e.talhao!==FE.set)return false;if(FE.val&&e.valvula!==FE.val)return false;
+  if(FE.prod&&e.produtor!==FE.prod)return false;if(FE.faz&&(e.fazenda||'')!==FE.faz)return false;if(FE.set&&e.talhao!==FE.set)return false;if(FE.var&&entVar(e)!==FE.var)return false;
   const sd=entSaldo(e);if(FE.st==='aberto'&&!(sd>0.0001))return false;if(FE.st==='baixado'&&sd>0.0001)return false;
   if(FE.ras&&String(e.rastreabilidade||'')!==FE.ras)return false;return true})
   .sort((a,b)=>String(b.data).localeCompare(String(a.data))||(+b.sequencia||0)-(+a.sequencia||0))}
@@ -1433,10 +1435,10 @@ function entLista(){const rows=entFiltro(),P=paginar('ent',rows);const tkg=sum(r
   const uniq=a=>[...new Set(a.filter(Boolean))].sort();
   const sel=(id,l,opts,v,todos='Todos',btn='')=>`<label>${l}<span class="row"><select id="${id}">${optsH([['',todos],...opts],v)}</select>${btn}</span></label>`;
   const filtros=`<div class="ent-f nf-opts"><label>Data início<input type="date" id="fe_ini" value="${esc(FE.ini)}"></label><label>Data fim<input type="date" id="fe_fim" value="${esc(FE.fim)}"></label>
-   ${sel('fe_prod','Produtor',nomesCad('produtores',S.envios.map(e=>e.produtor)).map(x=>[x,x]),FE.prod,'Todos',maisBtn('produtores','fe_prod','produtor'))}${sel('fe_faz','Fazenda',nomesCad('fazendas',S.envios.map(e=>e.fazenda)).map(x=>[x,x]),FE.faz,'Todos',maisBtn('fazendas','fe_faz','fazenda'))}
-   ${sel('fe_set','Setor',S.talhoes.map(t=>[t.id,t.nome]),FE.set,'Todos',maisBtn('talhoes','fe_set','setor'))}${sel('fe_val','Válvula',valvOpts(FE.set).concat(S.envios.filter(e=>!FE.set||e.talhao===FE.set).map(e=>e.valvula)).filter((x,i,a)=>x&&a.indexOf(x)===i).sort().map(x=>[x,x]),FE.val,'Todos',maisBtn('valvulas','fe_val','válvula'))}
+   ${sel('fe_prod','Produtor',nomesCad('produtores',S.envios.map(e=>e.produtor)).map(x=>[x,x]),FE.prod,'Todos',maisBtn('produtores','fe_prod','produtor'))}${sel('fe_faz','Fazenda / Lote',nomesCad('fazendas',S.envios.map(e=>e.fazenda)).map(x=>[x,x]),FE.faz,'Todos',maisBtn('fazendas','fe_faz','fazenda'))}
+   ${sel('fe_set','Setor',S.talhoes.map(t=>[t.id,t.nome]),FE.set,'Todos',maisBtn('talhoes','fe_set','setor'))}${sel('fe_var','Variedade',uniq([...S.talhoes.map(t=>t.variedade),...S.envios.map(entVar)]).map(x=>[x,x]),FE.var,'Todas')}
    ${sel('fe_st','Status',[['aberto','EM ABERTO'],['baixado','BAIXADO']],FE.st,'TODOS')}
-   ${sel('fe_ras','Rastreabilidade',uniq(S.envios.filter(e=>(!FE.set||e.talhao===FE.set)&&(!FE.val||e.valvula===FE.val)).map(e=>e.rastreabilidade)).reverse().map(x=>[x,x]),FE.ras,'Todas')}<div class="ent-go"><button type="button" class="btn" data-ent-go>Pesquisar</button>${Object.values(FE).some(Boolean)?'<button type="button" class="btn sm" data-ent-limpa>Limpar</button>':''}</div></div>`;
+   ${sel('fe_ras','Rastreabilidade',uniq(S.envios.filter(e=>(!FE.set||e.talhao===FE.set)&&(!FE.var||entVar(e)===FE.var)).map(e=>e.rastreabilidade)).reverse().map(x=>[x,x]),FE.ras,'Todas')}<div class="ent-go"><button type="button" class="btn" data-ent-go>Pesquisar</button>${Object.values(FE).some(Boolean)?'<button type="button" class="btn sm" data-ent-limpa>Limpar</button>':''}</div></div>`;
   const st=sd=>sd>0.0001?'<span class="pill warn">Em aberto</span>':'<span class="pill ok">Baixado</span>';
   const tr=e=>{const sd=entSaldo(e);return`<tr><td class="n">${esc(e.sequencia||'—')}${ex(e)}</td><td>${fd(e.data)}</td><td>${esc(e.tipo||'Caixa')}</td><td class="wrap">${esc(e.produtor||'—')}${e.fazenda?`<br><span class="note">${esc(e.fazenda)}</span>`:''}</td><td>${esc(e.atividade||'—')}</td><td>${esc(tNome(e.talhao))}</td><td class="wrap">${esc(e.valvula||'—')}</td><td class="mono">${esc(e.rastreabilidade||'—')}</td><td class="n">${int(e.caixas)}</td><td class="n">${num3(e.kg)}</td><td class="n${sd<-0.0001?' neg':''}">${num3(sd)}<br>${st(sd)}</td>
    <td class="n"><button type="button" class="ico" data-ent-det="${e.id}" title="Detalhes" aria-label="Ver produtos da entrada">${ICO.lista}</button></td><td>${esc(e.contentor||'—')}</td><td class="n">${acoes('envios',e.id)}</td></tr>`};
@@ -1445,8 +1447,8 @@ function entLista(){const rows=entFiltro(),P=paginar('ent',rows);const tkg=sum(r
   ${rows.length?`<div class="tbl"><table class="ent-t"><thead><tr><th class="n">Seq.</th><th>Emissão</th><th>Tipo</th><th>Produtor / fazenda</th><th>Atividade</th><th>Setor</th><th>Válvula</th><th>Rastreabilidade</th><th class="n">Qtd. (cx)</th><th class="n">Qtd. (kg)</th><th class="n">Saldo (kg)</th><th class="n">Detalhes</th><th>Contentor</th><th class="n">Ações</th></tr></thead><tbody>${P.vis.map(tr).join('')}</tbody>
    <tfoot><tr><td>Total</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="n">${int(tcx)}</td><td class="n">${num3(tkg)}</td><td class="n">${num3(tsd)}</td><td></td><td></td><td></td></tr></tfoot></table></div>${P.html}`
   :`<div class="tbl"><div class="empty">Nenhuma entrada encontrada.${canWrite?' <button class="btn sm" data-new="envios">Lançar a primeira</button>':''}</div></div>`}`}
-function entLer(){const g=id=>(document.getElementById(id)||{}).value||'';Object.assign(FE,{ini:g('fe_ini'),fim:g('fe_fim'),prod:g('fe_prod'),faz:g('fe_faz'),set:g('fe_set'),val:g('fe_val'),st:g('fe_st'),ras:g('fe_ras')});(PG.ent||{}).page=0}
-async function entPDF(){const rows=entFiltro();const f=[FE.ini&&'de '+fd(FE.ini),FE.fim&&'até '+fd(FE.fim),FE.prod,FE.faz,FE.set&&tNome(FE.set),FE.val,FE.st==='aberto'?'em aberto':FE.st==='baixado'?'baixado':'',FE.ras].filter(Boolean).join(' · ');
+function entLer(){const g=id=>(document.getElementById(id)||{}).value||'';Object.assign(FE,{ini:g('fe_ini'),fim:g('fe_fim'),prod:g('fe_prod'),faz:g('fe_faz'),set:g('fe_set'),var:g('fe_var'),st:g('fe_st'),ras:g('fe_ras')});(PG.ent||{}).page=0}
+async function entPDF(){const rows=entFiltro();const f=[FE.ini&&'de '+fd(FE.ini),FE.fim&&'até '+fd(FE.fim),FE.prod,FE.faz,FE.set&&tNome(FE.set),FE.var,FE.st==='aberto'?'em aberto':FE.st==='baixado'?'baixado':'',FE.ras].filter(Boolean).join(' · ');
   await gerarPDF({titulo:'Entrada da Fruta',kpis:[['Filtros',f||'Nenhum'],['Entradas',String(rows.length)],['Quantidade',int(sum(rows,e=>+e.caixas||0))+' caixas'],['Quantidade (kg)',num3(sum(rows,e=>+e.kg||0))],['Saldo (kg)',num3(sum(rows,e=>entSaldo(e)))]],
    secoes:[{titulo:'Entradas',cols:[C('Seq.'),C('Emissão','date'),C('Tipo'),C('Produtor'),C('Atividade'),C('Setor'),C('Válvula'),C('Rastreabilidade'),C('Qtd. (cx)','int'),C('Qtd. (kg)','num'),C('Saldo (kg)','num'),C('Contentor')],
     rows:rows.map(e=>[e.sequencia||'',e.data,e.tipo||'Caixa',e.produtor||'',e.atividade||'',tNome(e.talhao),e.valvula||'',e.rastreabilidade||'',+e.caixas||0,+e.kg||0,entSaldo(e),e.contentor||''])},
@@ -1518,8 +1520,60 @@ function entClick(t,e){
   if(t.hasAttribute('data-ent-go')){entLer();render();return true}
   if(t.hasAttribute('data-ent-limpa')){Object.keys(FE).forEach(k=>FE[k]='');render();return true}
   if(t.dataset.entDet){abrirEntDet(t.dataset.entDet);return true}
-  if(t.hasAttribute('data-ent-pdf')){entPDF().catch(x=>showBanner('Não consegui gerar o PDF: '+(x.message||x.code)));return true}return false}
+  if(t.hasAttribute('data-ent-pdf')){REL=null;abrirEntRel();return true}return false}
 
+/* ---------- relatório da entrada da fruta ---------- */
+const entVar=e=>e.variedade||(S.talhoes.find(t=>t.id===e.talhao)||{}).variedade||'';
+let REL=null;
+function abrirEntRel(){const R=REL||(REL={ini:FE.ini,fim:FE.fim,ano:'',layout:'1',opcao:FE.st||'',sobre:'0',ids:[],prod:FE.prod,faz:FE.faz,set:FE.set,val:'',vari:FE.var||'',produtos:true,roms:true,rProd:false,rVar:false,soRes:false});
+  impF.dataset.mode='entrel';document.getElementById('impT').textContent='Relatório - Entrada da Fruta';const s=document.getElementById('impS');s.hidden=false;s.disabled=false;s.textContent='PDF';
+  document.getElementById('impErr').textContent='';if(!document.getElementById('impX'))s.insertAdjacentHTML('beforebegin','<button type="button" class="btn ok-btn" id="impX">Excel</button>');
+  const uniq=a=>[...new Set(a.filter(Boolean))].sort();const anos=uniq(S.envios.map(e=>String(e.data||'').slice(0,4))).reverse();
+  const sel=(k,l,opts,todos='Todos')=>`<label>${l}<select data-rl="${k}">${optsH([['',todos],...opts],R[k])}</select></label>`;
+  const chk=(k,l)=>`<label class="chk"><input type="checkbox" data-rl="${k}"${R[k]?' checked':''}> ${l}</label>`;
+  const lista=[...S.envios].sort((a,b)=>String(b.data).localeCompare(String(a.data))||(+b.sequencia||0)-(+a.sequencia||0));
+  impB.innerHTML=`<div class="rom-b"><div class="nf-opts">
+   <label>Data inicial<input type="date" data-rl="ini" value="${esc(R.ini)}"></label><label>Data final<input type="date" data-rl="fim" value="${esc(R.fim)}"></label>
+   ${sel('ano','Ano',anos.map(a=>[a,a]))}
+   <label>Layout<select data-rl="layout">${optsH([['1','Modelo 1 - completo'],['2','Modelo 2 - resumido']],R.layout)}</select></label>
+   <label>Opção<select data-rl="opcao">${optsH([['','Ambos'],['aberto','Em aberto'],['baixado','Baixado']],R.opcao)}</select></label>
+   <label>Cálculo de sobrepeso<select data-rl="sobre">${optsH([['0','Não calcular'],['1','Cálculo 1 - peso real × peso da caixa']],R.sobre)}</select></label>
+   <label class="span-all">Entrada da Fruta <span class="note">(nenhuma marcada = todas que passam nos filtros; segure Ctrl para marcar várias)</span><select data-rl="ids" multiple size="5">${lista.map(e=>`<option value="${e.id}"${R.ids.includes(e.id)?' selected':''}>Seq: ${esc(e.sequencia||'—')} - Emissão: ${fd(e.data)} - Válvula: ${esc(e.valvula||'—')} - Rastreabilidade: ${esc(e.rastreabilidade||'—')} - Produto: ${esc(entItens(e).map(i=>i.produto).join(', '))}</option>`).join('')}</select></label>
+   ${sel('prod','Produtor',nomesCad('produtores',S.envios.map(e=>e.produtor)).map(x=>[x,x]))}${sel('faz','Fazenda / Lote',nomesCad('fazendas',S.envios.map(e=>e.fazenda)).map(x=>[x,x]))}
+   ${sel('set','Setor',S.talhoes.map(t=>[t.id,t.nome]))}${sel('val','Válvula',uniq([...S.valvulas.map(v=>v.nome),...S.envios.map(e=>e.valvula)]).map(x=>[x,x]))}
+   ${sel('vari','Variedade',uniq([...S.talhoes.map(t=>t.variedade),...S.envios.map(entVar)]).map(x=>[x,x]),'Todas')}</div>
+   <div class="rel-chk">${chk('produtos','Imprimir produtos')}${chk('roms','Imprimir romaneios referenciados')}${chk('rProd','Resumo por produto')}${chk('rVar','Resumo por variedade')}${chk('soRes','Imprimir apenas resumos')}</div></div>`;
+  imp.showModal()}
+function relLer(){impB.querySelectorAll('[data-rl]').forEach(el=>{const k=el.dataset.rl;REL[k]=el.type==='checkbox'?el.checked:el.multiple?[...el.selectedOptions].map(o=>o.value):el.value})}
+function relMontar(){relLer();const R=REL;const sobre=R.sobre==='1',mod2=R.layout==='2';
+  let rows=S.envios.filter(e=>{const d=e.data||'';if(R.ids.length)return R.ids.includes(e.id);
+    if(R.ini&&d<R.ini)return false;if(R.fim&&d>R.fim)return false;if(R.ano&&d.slice(0,4)!==R.ano)return false;
+    if(R.prod&&e.produtor!==R.prod)return false;if(R.faz&&(e.fazenda||'')!==R.faz)return false;if(R.set&&e.talhao!==R.set)return false;if(R.val&&e.valvula!==R.val)return false;if(R.vari&&entVar(e)!==R.vari)return false;return true});
+  rows=rows.filter(e=>{const sd=entSaldo(e);return R.opcao==='aberto'?sd>0.0001:R.opcao==='baixado'?sd<=0.0001:true}).sort((a,b)=>String(a.data).localeCompare(String(b.data))||(+a.sequencia||0)-(+b.sequencia||0));
+  if(!rows.length)return null;
+  const nom=i=>kgUn(i.produto)*(+i.qtd||0);const its=rows.flatMap(e=>entItens(e).map(i=>({e,i})));
+  const kgT=sum(rows,e=>+e.kg||0),cxT=sum(rows,e=>+e.caixas||0),nomT=sum(its,x=>nom(x.i)),kgNom=sum(its.filter(x=>nom(x.i)>0),x=>+x.i.kg||0);
+  const filtros=[R.ids.length?R.ids.length+' entrada(s) escolhida(s)':'',R.ano&&'ano '+R.ano,R.prod,R.faz,R.set&&tNome(R.set),R.val,R.vari,R.opcao==='aberto'?'em aberto':R.opcao==='baixado'?'baixado':''].filter(Boolean).join(' · ');
+  const kpis=[['Período',R.ids.length?'Entradas escolhidas':(R.ini||R.fim)?(R.ini?fd(R.ini):'início')+' a '+(R.fim?fd(R.fim):'hoje'):R.ano?'Ano '+R.ano:'Todo o período'],['Filtros',filtros||'Nenhum'],['Entradas',String(rows.length)],['Quantidade',int(cxT)+' caixas'],['Quantidade (kg)',num3(kgT)],['Média kg por caixa',cxT?num(kgT/cxT):'—'],['Saldo (kg)',num3(sum(rows,e=>entSaldo(e)))]];
+  if(sobre)kpis.push(['Sobrepeso',nomT?num3(kgNom-nomT)+' kg ('+num((kgNom-nomT)/nomT*100)+'%)':'Sem peso de caixa no nome dos produtos']);
+  const secoes=[];
+  if(!R.soRes){
+    secoes.push(mod2?{titulo:'Entradas da fruta',cols:[C('Seq.'),C('Emissão','date'),C('Setor'),C('Rastreabilidade'),C('Qtd. (cx)','int'),C('Qtd. (kg)','num'),C('Saldo (kg)','num')],rows:rows.map(e=>[e.sequencia||'',e.data,tNome(e.talhao),e.rastreabilidade||'',+e.caixas||0,+e.kg||0,entSaldo(e)])}
+     :{titulo:'Entradas da fruta',cols:[C('Seq.'),C('Emissão','date'),C('Tipo'),C('Produtor'),C('Fazenda'),C('Atividade'),C('Setor'),C('Válvula'),C('Variedade'),C('Rastreabilidade'),C('Contentor'),C('Qtd. (cx)','int'),C('Qtd. (kg)','num'),C('Saldo (kg)','num')],
+       rows:rows.map(e=>[e.sequencia||'',e.data,e.tipo||'Caixa',e.produtor||'',e.fazenda||'',e.atividade||'',tNome(e.talhao),e.valvula||'',entVar(e),e.rastreabilidade||'',e.contentor||'',+e.caixas||0,+e.kg||0,entSaldo(e)])});
+    if(R.produtos)secoes.push({titulo:'Produtos das entradas',cols:[C('Seq.'),C('Rastreabilidade'),C('Produto'),C('Quantidade','num'),C('Quantidade (kg)','num'),...(sobre?[C('Kg nominal','num'),C('Sobrepeso (kg)','num'),C('Sobrepeso %','num')]:[])],
+      rows:its.map(({e,i})=>{const n=nom(i);return[e.sequencia||'',e.rastreabilidade||'',i.produto,+i.qtd||0,+i.kg||0,...(sobre?(n?[n,(+i.kg||0)-n,((+i.kg||0)-n)/n*100]:['','','']):[])]})});
+    if(R.roms){const ref=[];rows.forEach(e=>{if(!e.rastreabilidade)return;S.romaneios.forEach(r=>(r.itens||[]).forEach(i=>{if(String(i.rastreio||'').toUpperCase()===String(e.rastreabilidade).toUpperCase())ref.push([e.sequencia||'',e.rastreabilidade,r.numero,r.dataEmissao,r.clienteNome||'',i.produto,r.tipo==='Caixa'?'':+i.qtd||0,+i.caixas||0,+i.peso||0])}))});
+      secoes.push({titulo:'Romaneios referenciados',cols:[C('Seq. entrada'),C('Rastreabilidade'),C('Romaneio nº'),C('Emissão','date'),C('Cliente'),C('Produto'),C('Pallets','num'),C('Caixas','int'),C('Peso (kg)','num')],rows:ref})}}
+  if(R.rProd||R.soRes){const m=new Map();its.forEach(({i})=>{const k=i.produto||'—';const o=m.get(k)||{q:0,kg:0,n:0};o.q+=+i.qtd||0;o.kg+=+i.kg||0;o.n+=nom(i);m.set(k,o)});
+    secoes.push({titulo:'Resumo por produto',cols:[C('Produto'),C('Quantidade','num'),C('Quantidade (kg)','num'),C('Kg por caixa','num'),...(sobre?[C('Sobrepeso (kg)','num'),C('Sobrepeso %','num')]:[])],
+      rows:[...m.entries()].sort((a,b)=>b[1].kg-a[1].kg).map(([k,o])=>[k,o.q,o.kg,o.q?o.kg/o.q:0,...(sobre?(o.n?[o.kg-o.n,(o.kg-o.n)/o.n*100]:['','']):[])])})}
+  if(R.rVar||R.soRes){const m=new Map();rows.forEach(e=>{const k=entVar(e)||'—';const o=m.get(k)||{n:0,q:0,kg:0,sd:0};o.n++;o.q+=+e.caixas||0;o.kg+=+e.kg||0;o.sd+=entSaldo(e);m.set(k,o)});
+    secoes.push({titulo:'Resumo por variedade',cols:[C('Variedade'),C('Entradas','int'),C('Qtd. (cx)','int'),C('Qtd. (kg)','num'),C('% do total','num'),C('Saldo (kg)','num')],rows:[...m.entries()].sort((a,b)=>b[1].kg-a[1].kg).map(([k,o])=>[k,o.n,o.q,o.kg,kgT?o.kg/kgT*100:0,o.sd])})}
+  return{titulo:'Relatório - Entrada da Fruta',semPeriodo:1,kpis,secoes}}
+async function salvarEntRel(err){const rep=relMontar();if(!rep){err.textContent='Nenhuma entrada com esses filtros.';return false}await gerarPDF(rep);return true}
+impF.addEventListener('click',async e=>{if(e.target.id!=='impX')return;const err=document.getElementById('impErr');err.textContent='';const rep=relMontar();if(!rep){err.textContent='Nenhuma entrada com esses filtros.';return}
+  e.target.disabled=true;try{await gerarXLSX(rep);imp.close()}catch(x){err.textContent='Não consegui gerar o Excel: '+(x.message||x)}finally{e.target.disabled=false}});
 /* ---------- romaneio, clientes e deduções ---------- */
 let romTab='lista',ROM=null;const BUSCA={rom:'',cli:'',ded:'',atv:''},PG={};
 const ICO={edit:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
@@ -1719,7 +1773,7 @@ async function importarDoc(kind,file){const msg=document.getElementById('docMsg'
 function docBar(){if(!canWrite)return;document.getElementById('dlgB').insertAdjacentHTML('afterbegin',`<div class="fld doc-bar"><b>Preencher com documento</b><div class="btns"><label class="btn sm" for="docCNH">Importar CNH digital (PF)</label><label class="btn sm" for="docCNPJ">Importar Cartão CNPJ (PJ)</label><button type="button" class="btn sm" id="cnpjBusca">Buscar CNPJ na Receita</button></div><span class="hint" id="docMsg">CNH digital: PDF exportado do app Carteira Digital de Trânsito. Cartão CNPJ: PDF do site da Receita Federal. Os dados vão para os campos abaixo; confira antes de salvar.</span><input type="file" id="docCNH" accept="application/pdf,.pdf" hidden><input type="file" id="docCNPJ" accept="application/pdf,.pdf" hidden></div>`)}
 document.getElementById('dlgB').addEventListener('change',e=>{if(e.target.id==='docCNH'||e.target.id==='docCNPJ'){const f=e.target.files[0];e.target.value='';importarDoc(e.target.id==='docCNH'?'cnh':'cnpj',f)}});
 document.getElementById('dlgB').addEventListener('click',e=>{if(e.target.id==='cnpjBusca')buscarCNPJ()});
-const MODOS={ent:salvarEnt,entdet:async()=>true,rom:salvarRom,baixa:salvarBaixa,ofx:salvarOFX,restore:salvarRestore,etq:gerarEtiquetas,qrver:async()=>true};
+const MODOS={entrel:salvarEntRel,ent:salvarEnt,entdet:async()=>true,rom:salvarRom,baixa:salvarBaixa,ofx:salvarOFX,restore:salvarRestore,etq:gerarEtiquetas,qrver:async()=>true};
 document.getElementById('ofxIn').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
   try{abrirOFX(parseOFX(await f.text()),f.name)}catch(x){showBanner('Extrato não importado: '+x.message)}});
 document.getElementById('bkIn').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
