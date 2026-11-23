@@ -35,6 +35,10 @@ Produtor, Fazenda, Setor e Válvula são escolhidos de uma lista (sem digitar), 
 
 O botão **Imprimir** da Entrada da Fruta abre o relatório: período, ano, layout (completo ou resumido), opção (ambos, em aberto, baixado), cálculo de sobrepeso, escolha de entradas, filtros por produtor, fazenda/lote, setor, válvula e variedade, e as opções de imprimir produtos, romaneios referenciados, resumo por produto, resumo por variedade ou apenas resumos. Sai em **PDF** ou **Excel**.
 
+## Pallet/Caixa
+
+Na aba **Entrada da fruta** há a tela **Pallet/Caixa**: Geral (emissão, cinta, tipo Pallet/Caixa, mercado interno/externo, transporte rodoviário/marítimo/aéreo, documento, atividade colheita/embalagem, cliente, quantidades, pesos, contramarca, guia, ordem de carga, status, local de resfriamento) e Produtos do pallet (entrada da fruta, produto final, quantidade, etiqueta, producer code). O peso de cada pallet baixa o saldo da entrada. O **Remonte** passa produtos de um pallet de origem para um pallet de destino (novo ou existente), com opção de troca de produto.
+
 ## Romaneios
 
 Na aba **Romaneios** ficam três telas:
