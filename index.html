@@ -191,6 +191,11 @@ dialog.wide{width:min(980px,calc(100vw - 24px))}
 .qr-cam video{display:block;width:100%;max-height:55vh;object-fit:cover}
 .qr-cam::after{content:"";position:absolute;inset:18% 22%;border:3px solid rgba(255,255,255,.85);border-radius:14px;pointer-events:none}
 /* romaneio */
+.ent-f{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:4px 0 14px;padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+.ent-f input,.ent-f select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-weight:400;width:100%;min-width:0;box-sizing:border-box}
+.ent-go{display:flex;gap:6px;align-items:end}.ent-go .btn{flex:1}
+.ent-t th,.ent-t td{padding-left:7px;padding-right:7px;font-size:.86rem}.ent-t .mono{font-size:.8rem;white-space:nowrap}
+tr.det td{background:var(--sunk)}.det-g{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.86rem}.det-g b{color:var(--muted);font-weight:700;margin-right:4px}
 .pk-h{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:4px}.pk-h h2{margin:0;font-family:var(--display);font-size:1.25rem;letter-spacing:.02em}
 main{grid-template-columns:minmax(0,1fr)}main>.tabs-in{width:100%;max-width:100%;margin:0}
 .srch{display:flex;gap:8px;margin:12px 0;max-width:560px}.srch input{flex:1;min-width:0;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}
@@ -361,14 +366,19 @@ const SCH={
   {k:'area',l:'Área (hectares)',type:'num',half:1,hint:'Usada para dividir os custos da fazenda toda'},
   {k:'plantas',l:'Nº de plantas',type:'num',half:1},
   {k:'obs',l:'Observação',type:'area'}]},
- envios:{t:'Uva enviada à cooperativa',f:[
-  {k:'data',l:'Data do envio',type:'date',req:1,half:1},
-  {k:'romaneio',l:'Nº do romaneio / ticket',half:1},
-  {k:'talhao',l:'De qual lote / latada',type:'select',opts:()=>talOpts(),req:1},
-  {k:'loteColheita',l:'Lote de colheita',half:1,hint:'Código do lote que vai no palete, se houver'},
+ envios:{t:'Entrada da fruta',f:[
+  {k:'sequencia',l:'Sequência',half:1,hint:'Em branco, o sistema numera sozinho'},
+  {k:'data',l:'Emissão',type:'date',req:1,half:1},
+  {k:'tipo',l:'Tipo',type:'select',opts:['Caixa','Pallet'],half:1},
+  {k:'atividade',l:'Atividade',type:'select',opts:()=>{const a=[...S.atividades].map(x=>x.nome).sort();return a.length?a:['EMBALAGEM','COLHEITA']},half:1},
+  {k:'produtor',l:'Produtor',req:1,list:()=>[...new Set([CFG.produtor,...S.envios.map(e=>e.produtor)].filter(Boolean))]},
+  {k:'talhao',l:'Parcela (latada)',type:'select',opts:()=>talOpts(),req:1,half:1},
+  {k:'valvula',l:'Válvula / setor',half:1,list:()=>[...new Set(S.envios.map(e=>e.valvula).filter(Boolean))].sort(),hint:'Ex.: SETOR 06- VITORIA 744'},
+  {k:'rastreabilidade',l:'Rastreabilidade',hint:'Em branco, gera sozinho: R-ano-setor-diames-kg por caixa (ex.: R-26-S06-1011-5.00)'},
+  {k:'caixas',l:'Quantidade',type:'num',req:1,half:1},
+  {k:'kg',l:'Quantidade (kg)',type:'num',req:1,half:1},
   {k:'mercado',l:'Mercado',type:'select',opts:['Externo','Interno'],half:1},
-  {k:'caixas',l:'Quantidade de caixas',type:'num',req:1,half:1},
-  {k:'kg',l:'Peso total (kg)',type:'num',req:1,half:1},
+  {k:'romaneio',l:'Nº do romaneio / ticket',half:1},
   {k:'embalagem',l:'Embalagem usada',list:itensEmb,hint:'Ao preencher, as caixas saem do estoque de embalagens automaticamente'},
   {k:'obs',l:'Observação',type:'area'}],
   calc:o=>{const c=carencias(o.data).find(x=>x.t.id===o.talhao);
@@ -619,7 +629,10 @@ frm.addEventListener('submit',async e=>{e.preventDefault();if(!cur)return;
     o.nome=o.nome.trim();o.uf=String(o.uf||'').trim().toUpperCase()}
   if(cur.col==='atividades'){o.nome=o.nome.trim().toUpperCase();if(S.atividades.some(x=>x.id!==cur.id&&String(x.nome).toUpperCase()===o.nome)){err.textContent='Já existe a atividade '+o.nome+'.';return}}
   if(cur.col==='deducoes'){o.nome=o.nome.trim().toUpperCase();if(S.deducoes.some(x=>x.id!==cur.id&&String(x.nome).toUpperCase()===o.nome)){err.textContent='Já existe a dedução '+o.nome+'.';return}}
-  if(cur.col==='envios'){o.semana=semanaISO(o.data);const t=S.talhoes.find(t=>t.id===o.talhao);o.variedade=t?.variedade||''}
+  if(cur.col==='envios'){o.produtor=String(o.produtor||'').trim().toUpperCase();o.valvula=String(o.valvula||'').trim().toUpperCase();
+    if(!String(o.sequencia||'').trim())o.sequencia=String(Math.max(0,...S.envios.map(x=>+x.sequencia||0))+1);
+    o.rastreabilidade=String(o.rastreabilidade||'').trim().toUpperCase()||rastreio(o);
+    o.semana=semanaISO(o.data);const t=S.talhoes.find(t=>t.id===o.talhao);o.variedade=t?.variedade||''}
   if(cur.col==='custos'&&o.pago==='Sim'&&!o.dataPagamento)o.dataPagamento=o.data;
   if(cur.col==='pcs'&&o.status==='Pago'&&!o.dataPagamento)o.dataPagamento=hoje();
   if(cur.ex)o.exemplo=true;
@@ -694,7 +707,7 @@ function alertas(){const h=hoje(),l=addDias(h,7),out=[];
 const V={
  inicio(){const R=resumo(),cx=caixaHoje(),per=ano==='todos'?'em todo o período':'em '+ano;
   const vazio=!COLS.some(c=>S[c].length);
-  if(vazio&&loaded.size>=COLS.length)return`<section class="verdict"><h2>Vamos começar</h2><p>Cadastre primeiro os lotes e latadas da fazenda. Depois lance a uva enviada, as PCs da Valexfruit e as notas de insumos. O painel se monta sozinho.</p><div class="btns" style="margin-top:8px">${canWrite?'<button class="btn pri" data-new="talhoes">+ Cadastrar lote / latada</button>':''}</div></section>`;
+  if(vazio&&loaded.size>=COLS.length)return`<section class="verdict"><h2>Vamos começar</h2><p>Cadastre primeiro os lotes e latadas da fazenda. Depois lance a entrada da fruta, as PCs da Valexfruit e as notas de insumos. O painel se monta sozinho.</p><div class="btns" style="margin-top:8px">${canWrite?'<button class="btn pri" data-new="talhoes">+ Cadastrar lote / latada</button>':''}</div></section>`;
   const tal=porTalhao(R).sort((a,b)=>b.res-a.res);
   const cats={};R.cs.forEach(c=>cats[c.categoria||'Outros']=(cats[c.categoria||'Outros']||0)+(+c.valor||0));
   return`
@@ -706,7 +719,7 @@ const V={
   <div class="kpis">
     ${kpi('Dinheiro em caixa hoje',brl(cx),'Saldo inicial + recebido − pago',cx<0?'neg':'')}
     ${kpi('Recebido da cooperativa',brl(R.recebido),R.aReceber?`Falta receber ${brl(R.aReceber)}`:'Nada pendente')}
-    ${kpi('Uva enviada',int(R.kg)+' kg',int(R.cx)+' caixas')}
+    ${kpi('Entrada da fruta',int(R.kg)+' kg',int(R.cx)+' caixas')}
     ${kpi('Custos diretos',brl(R.dir),R.custo?num(R.dir/R.custo*100)+'% do total':'')}
     ${kpi('Custos indiretos',brl(R.ind),'Divididos entre os lotes')}
     ${kpi('Custo por caixa',brl(R.custoCx),'Tudo que gastou ÷ caixas')}
@@ -720,12 +733,7 @@ const V={
   ${table(null,[{h:'Lote / latada',v:r=>esc(r.t.nome)+ex(r.t)},{h:'Variedade',v:r=>esc(r.t.variedade||'—')},{h:'Kg enviados',n:1,v:r=>int(r.kg)},{h:'Receita est.',n:1,v:r=>brl(r.rec)},{h:'Custo direto',n:1,v:r=>brl(r.dir)},{h:'Parte indireta',n:1,v:r=>brl(r.ind)},{h:'Custo / kg',n:1,v:r=>r.kg?brl(r.ckg):'—'},{h:'Resultado',n:1,v:r=>`<b class="${r.res>=0?'pos':'neg'}">${brl(r.res)}</b>`}],tal)}
   </section>`},
 
- envios(){const R=resumo();const rows=[...R.es].sort(byDate('data'));
-  const pm={};R.es.forEach(e=>{pm[e.mercado||'—']=(pm[e.mercado||'—']||0)+(+e.kg||0)});
-  return`${head('Uva enviada à cooperativa','Cada carga que saiu da fazenda, por lote ou latada. As caixas usadas saem do estoque de embalagens.','envios')}
-  <div class="kpis">${kpi('Total enviado',int(R.kg)+' kg',int(R.cx)+' caixas')}${kpi('Média por caixa',R.cx?num(R.kg/R.cx)+' kg':'—')}${Object.entries(pm).map(([k,v])=>kpi('Mercado '+k.toLowerCase(),int(v)+' kg',R.kg?num(v/R.kg*100)+'%':'')).join('')}</div>
-  ${table('envios',[{h:'Data',v:r=>fd(r.data)+ex(r)},{h:'Sem.',n:1,v:r=>r.semana||semanaISO(r.data)},{h:'Lote / latada',v:r=>esc(tNome(r.talhao))},{h:'Variedade',v:r=>esc(r.variedade||'—')},{h:'Mercado',v:r=>`<span class="pill ${r.mercado==='Externo'?'grape':''}">${esc(r.mercado||'—')}</span>`},{h:'Romaneio',v:r=>esc(r.romaneio||'—')},{h:'Caixas',n:1,v:r=>int(r.caixas)},{h:'Kg',n:1,v:r=>int(r.kg)}],rows,['Total','','','','','',int(R.cx),int(R.kg)])}`},
-
+ envios(){return entLista()},
  pcs(){const R=resumo();const rows=[...R.ps].sort(byDate('dataFim'));
   const t=k=>sum(rows,p=>pc(p)[k]);
   return`${head('Prestação de contas (PC) da Valexfruit','O fechamento semanal que a cooperativa manda: quanto vendeu, quanto descontou e quanto vai pagar.','pcs')}
@@ -877,10 +885,10 @@ const V={
    <p class="note">Faça o backup toda semana e guarde o arquivo no computador, no pen drive ou no Google Drive. Mesmo com o banco na nuvem, o backup é a sua garantia contra exclusões por engano.${CFG.ultimoBackup?' Último backup: <b>'+fd(CFG.ultimoBackup)+'</b>.':''}</p>
    <div class="btns">${sessao?.papel==='admin'?`<button class="btn pri" data-backup${dl?'':' disabled'}>Baixar backup completo</button>`:''}${canWrite?'<button class="btn" data-restore>Restaurar de um backup</button>':''}</div></section>`})()}
   <section class="panel" style="max-width:640px"><h3>Como usar</h3><ol class="note" style="margin:0;padding-left:18px;display:grid;gap:6px">
-   <li>Cadastre os lotes e latadas com a área.</li><li>A cada carga, lance em <b>Uva enviada</b>.</li><li>Quando a Valexfruit mandar a PC da semana, lance em <b>Prestação de contas</b> e marque "Recebi" quando o dinheiro cair.</li>
+   <li>Cadastre os lotes e latadas com a área.</li><li>A cada carga, lance em <b>Entrada da fruta</b>.</li><li>Quando a Valexfruit mandar a PC da semana, lance em <b>Prestação de contas</b> e marque "Recebi" quando o dinheiro cair.</li>
    <li>Toda nota de insumo, mão de obra ou conta vai em <b>Notas e custos</b>.</li><li>Compras de caixas, cumbucas e lona vão em <b>Embalagens</b>.</li><li>No packing, imprima as etiquetas QR de cada embaladeira em <b>Cadastros → Equipe</b> e use o <b>Leitor QR</b> para contar as caixas. Crie usuários com perfil <b>Leitor QR</b> para quem só opera a leitura.</li><li>O <b>Início</b> mostra o resultado, sem precisar fazer conta.</li></ol></section>`}
 };
-const TABS=[['inicio','Início'],['envios','Uva enviada'],['romaneios','Romaneios'],['pcs','Prestação de contas'],['custos','Notas e custos'],['embalagens','Estoque'],['producao','Produção'],['packing','Packing'],['leitura','Leitor QR'],['pulverizacoes','Pulverização'],['financeiro','Financeiro'],['relatorios','Relatórios'],['talhoes','Cadastros'],['ajustes','Ajustes']];
+const TABS=[['inicio','Início'],['envios','Entrada da fruta'],['romaneios','Romaneios'],['pcs','Prestação de contas'],['custos','Notas e custos'],['embalagens','Estoque'],['producao','Produção'],['packing','Packing'],['leitura','Leitor QR'],['pulverizacoes','Pulverização'],['financeiro','Financeiro'],['relatorios','Relatórios'],['talhoes','Cadastros'],['ajustes','Ajustes']];
 
 /* ---------- render ---------- */
 function anos(){const s=new Set([String(new Date().getFullYear())]);const a=d=>d&&s.add(String(d).slice(0,4));
@@ -904,7 +912,7 @@ function render(){
 }
 document.getElementById('ano').addEventListener('change',e=>{ano=e.target.value;try{localStorage.setItem(LKEY+'-ano',ano)}catch(x){}render()});
 try{const a=localStorage.getItem(LKEY+'-ano');if(a)ano=a;const t=(location.hash||'').slice(1);if(t&&V[t])view=t}catch(e){}
-document.addEventListener('click',async e=>{const t=e.target.closest('[data-tab],[data-new],[data-edit],[data-exp],[data-go],[data-xml],[data-dia],[data-undo],[data-close-imp],[data-baixa],[data-fin],[data-ofx],[data-autoconc],[data-conc-ok],[data-conc-undo],[data-rep],[data-backup],[data-restore],[data-etq],[data-qrver],[data-romtab],[data-rom-novo],[data-rom-pdf],[data-cad-pdf],[data-ded-padrao],[data-atv-padrao],[data-busca-go],[data-pg],[data-row-edit],[data-row-del],#lqTeclado,#lqUndo,#lqCamBtn,#cfgSave,#delEx');
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-tab],[data-new],[data-edit],[data-exp],[data-go],[data-xml],[data-dia],[data-undo],[data-close-imp],[data-baixa],[data-fin],[data-ofx],[data-autoconc],[data-conc-ok],[data-conc-undo],[data-rep],[data-backup],[data-restore],[data-etq],[data-qrver],[data-romtab],[data-rom-novo],[data-rom-pdf],[data-cad-pdf],[data-ded-padrao],[data-ent-go],[data-ent-limpa],[data-ent-det],[data-ent-pdf],[data-atv-padrao],[data-busca-go],[data-pg],[data-row-edit],[data-row-del],#lqTeclado,#lqUndo,#lqCamBtn,#cfgSave,#delEx');
   if(!t){if(view==='leitura'&&!e.target.closest('input,select,textarea,label,a,summary,dialog'))focoLeitor();return}
   if(romClick(t,e))return;
   if(t.hasAttribute('data-etq')){abrirEtq();return}
@@ -926,7 +934,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-tab]
   if(t.hasAttribute('data-dia')){abrirDia();return}
   if(t.dataset.undo){desfazer(t);return}
   if(t.dataset.tab||t.dataset.go){view=t.dataset.tab||t.dataset.go;render();window.scrollTo({top:0});return}
-  if(t.dataset.new){if(t.dataset.new==='envios'&&!S.talhoes.length){view='talhoes';render();openForm('talhoes');return}const PRE={custos:{classe:'Direto',forma:'A prazo',pago:'Não'},pcs:{status:'Aguardando'},producao:{valorCaixa:CFG.valorCaixa||''},equipe:{funcao:t.dataset.funcao||'Embaladeira'},movfin:{tipo:t.dataset.tipo||'Saída',situacao:'Previsto',data:hoje()},insumos:{tipo:'Entrada'},embalagens:{tipo:'Entrada'}};openForm(t.dataset.new,null,PRE[t.dataset.new]||null);return}
+  if(t.dataset.new){if(t.dataset.new==='envios'&&!S.talhoes.length){view='talhoes';render();openForm('talhoes');return}const PRE={envios:{tipo:'Caixa',atividade:(S.atividades.find(a=>a.nome==='EMBALAGEM')||{}).nome||'EMBALAGEM',produtor:([...S.envios].sort(byDate('data'))[0]||{}).produtor||CFG.produtor||'',mercado:'Externo'},custos:{classe:'Direto',forma:'A prazo',pago:'Não'},pcs:{status:'Aguardando'},producao:{valorCaixa:CFG.valorCaixa||''},equipe:{funcao:t.dataset.funcao||'Embaladeira'},movfin:{tipo:t.dataset.tipo||'Saída',situacao:'Previsto',data:hoje()},insumos:{tipo:'Entrada'},embalagens:{tipo:'Entrada'}};openForm(t.dataset.new,null,PRE[t.dataset.new]||null);return}
   if(t.dataset.edit){if(e.target.closest('button'))return;openForm(t.dataset.edit,S[t.dataset.edit].find(r=>r.id===t.dataset.id));return}
   if(t.dataset.exp){exportar(t.dataset.exp);return}
   if(t.id==='cfgSave'){const v=pBR(document.getElementById('cfgSaldo').value);const m=document.getElementById('cfgMsg');if(isNaN(v)){m.textContent='Saldo inválido';return}
@@ -976,7 +984,7 @@ function palpite(n,it){const m=(CFG.mapaXml||{})[mapKey(n,it)];if(m)return m;
 function catPalpite(n){const ns=n.itens.map(i=>i.ncm||'');if(ns.some(x=>/^3808/.test(x)))return'Defensivos';if(ns.some(x=>/^310/.test(x)))return'Fertilizantes e adubos';
   const ds=n.itens.map(i=>palpite(n,i).d);if(ds.length&&ds.every(d=>d==='emb'))return/LONA/i.test(n.itens.map(i=>i.xProd).join(' '))?'Lona e cobertura':'Embalagens';return'Outros'}
 const DEST_E=[['emb','Estoque de embalagens'],['ins','Estoque de insumos'],['nada','Só no custo (não é estoque)']];
-const DEST_S=[['uva','Uva enviada à cooperativa'],['emb','Baixa no estoque de embalagens'],['ins','Baixa no estoque de insumos'],['nada','Não controlar']];
+const DEST_S=[['uva','Entrada da fruta'],['emb','Baixa no estoque de embalagens'],['ins','Baixa no estoque de insumos'],['nada','Não controlar']];
 function nfHTML(n,i){const dup=S.notasxml.some(x=>x.id===n.chave)||IMP.slice(0,i).some(x=>x.chave===n.chave);n.dup=dup;
   const aviso=n.conf==='semdoc'?'<span class="pill warn">Confira entrada/saída: informe o CPF/CNPJ do produtor em Ajustes</span>':n.conf==='outro'?'<span class="pill warn">O CPF/CNPJ do produtor não aparece nesta nota</span>':'';
   const ent=n.tipo==='Entrada';
@@ -1156,7 +1164,7 @@ const fmtCel=(t,v)=>t==='brl'?brl(v):t==='num'?num(v):t==='int'?int(v):t==='date
 const C=(h,t='txt')=>({h,t});
 function relatorio(k){const R=resumo();const T=titulos();
   const sCustos={titulo:'Notas e custos',cols:[C('Data','date'),C('NF'),C('Descrição'),C('Fornecedor'),C('Categoria'),C('Tipo'),C('Lote'),C('Valor','brl'),C('Pagamento')],rows:[...R.cs].sort(byDate('data')).reverse().map(c=>[c.data,c.nota||'',c.descricao,c.fornecedor||'',c.categoria||'',c.classe||'',tNome(c.talhao),+c.valor||0,c.forma==='Descontado na PC'?'Na PC':(titulo('custos',c)||{}).st||''])};
-  const sEnv={titulo:'Uva enviada',cols:[C('Data','date'),C('Semana','int'),C('Lote / latada'),C('Variedade'),C('Mercado'),C('Romaneio'),C('Caixas','int'),C('Kg','num')],rows:[...R.es].sort(byDate('data')).reverse().map(e=>[e.data,e.semana||semanaISO(e.data),tNome(e.talhao),e.variedade||'',e.mercado||'',e.romaneio||'',+e.caixas||0,+e.kg||0])};
+  const sEnv={titulo:'Entrada da fruta',cols:[C('Emissão','date'),C('Semana','int'),C('Parcela (latada)'),C('Variedade'),C('Mercado'),C('Romaneio'),C('Caixas','int'),C('Kg','num')],rows:[...R.es].sort(byDate('data')).reverse().map(e=>[e.data,e.semana||semanaISO(e.data),tNome(e.talhao),e.variedade||'',e.mercado||'',e.romaneio||'',+e.caixas||0,+e.kg||0])};
   const sPC={titulo:'Prestações de contas Valexfruit',cols:[C('Semana'),C('De','date'),C('Até','date'),C('Kg aprovados','num'),C('Bruto','brl'),C('Taxa coop.','brl'),C('Frete','brl'),C('Funrural/impostos','brl'),C('Outros','brl'),C('Insumos','brl'),C('Líquido','brl'),C('Situação')],rows:[...R.ps].sort(byDate('dataFim')).reverse().map(p=>[p.semana,p.dataInicio,p.dataFim,+p.kgAprovado||0,+p.valorBruto||0,+p.taxaCoop||0,+p.frete||0,+p.impostos||0,+p.outros||0,+p.insumos||0,pc(p).liquido,(titulo('pcs',p)||{}).st])};
   const tit=(tp)=>({titulo:tp==='pagar'?'Contas a pagar em aberto':'Contas a receber em aberto',cols:[C('Vencimento','date'),C('Descrição'),C(tp==='pagar'?'Fornecedor':'Cliente'),C('Origem'),C('Valor','brl'),C(tp==='pagar'?'Pago':'Recebido','brl'),C('Saldo','brl'),C('Situação')],rows:T.filter(t=>t.tipo===tp&&t.st!=='Quitado').sort((a,b)=>String(a.venc).localeCompare(String(b.venc))).map(t=>[t.venc,t.desc,t.parte,t.origem,t.valor,t.pago,t.saldo,t.vencido?'Vencido':t.st])});
   const sMov={titulo:'Movimento de caixa (baixas)',cols:[C('Data','date'),C('Conta'),C('Descrição'),C('Origem'),C('Entrada','brl'),C('Saída','brl'),C('Conciliado')],rows:(()=>{const cc=conciliados();return movimentos().filter(m=>inAno(m.data)).sort((a,b)=>a.data.localeCompare(b.data)).map(m=>[m.data,contaNome(m.conta),m.t.desc,m.t.origem,m.valor>0?m.valor:0,m.valor<0?-m.valor:0,cc.has(m.key)?'Sim':'Não'])})()};
@@ -1172,11 +1180,11 @@ function relatorio(k){const R=resumo();const T=titulos();
   const sLote={titulo:'Resultado por lote e latada',cols:[C('Lote / latada'),C('Variedade'),C('Kg enviados','num'),C('Receita estimada','brl'),C('Custo direto','brl'),C('Parte indireta','brl'),C('Custo por kg','brl'),C('Resultado','brl')],rows:tal.map(r=>[r.t.nome,r.t.variedade||'',r.kg,r.rec,r.dir,r.ind,r.ckg,r.res])};
   const cats={};R.cs.forEach(c=>cats[c.categoria||'Outros']=(cats[c.categoria||'Outros']||0)+(+c.valor||0));
   const sCat={titulo:'Custos por categoria',cols:[C('Categoria'),C('Valor','brl'),C('% do total','num')],rows:Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v,R.custo?v/R.custo*100:0])};
-  const kGer=[['Resultado',brl(R.res)],['Receita líquida das PCs',brl(R.receita)],['Custos totais',brl(R.custo)],['Custos diretos',brl(R.dir)],['Custos indiretos',brl(R.ind)],['Uva enviada',int(R.kg)+' kg / '+int(R.cx)+' cx'],['Custo por kg',brl(R.custoKg)],['Preço médio líquido/kg',brl(R.precoKg)],['Saldo em contas hoje',brl(caixaHoje())]];
+  const kGer=[['Resultado',brl(R.res)],['Receita líquida das PCs',brl(R.receita)],['Custos totais',brl(R.custo)],['Custos diretos',brl(R.dir)],['Custos indiretos',brl(R.ind)],['Entrada da fruta',int(R.kg)+' kg / '+int(R.cx)+' cx'],['Custo por kg',brl(R.custoKg)],['Preço médio líquido/kg',brl(R.precoKg)],['Saldo em contas hoje',brl(caixaHoje())]];
   const D={
    gerencial:{titulo:'Resumo gerencial',kpis:kGer,secoes:[sLote,sCat]},
    custos:{titulo:'Notas e custos',secoes:[sCustos]},
-   envios:{titulo:'Uva enviada à cooperativa',secoes:[sEnv]},
+   envios:{titulo:'Entrada da fruta',secoes:[sEnv]},
    pcs:{titulo:'Prestações de contas',secoes:[sPC]},
    financeiro:{titulo:'Contas a pagar e a receber',kpis:[['A pagar',brl(sum(tit('pagar').rows,r=>r[6]))],['A receber',brl(sum(tit('receber').rows,r=>r[6]))],['Saldo em contas',brl(caixaHoje())]],secoes:[tit('pagar'),tit('receber'),sContas]},
    fluxo:{titulo:'Fluxo de caixa e conciliação',secoes:[sMov,sContas]},
@@ -1185,7 +1193,7 @@ function relatorio(k){const R=resumo();const T=titulos();
    pulverizacao:{titulo:'Pulverizações',secoes:[sPulT,sPulL]}};
   if(k==='completo')return{titulo:'Relatório completo',kpis:kGer,secoes:[sLote,sCat,sCustos,sEnv,sPC,tit('pagar'),tit('receber'),sMov,sContas,est(estoque(),'Embalagens'),est(estoqueIns(),'Insumos'),sProdR,sProdL,sPulT,sPulL]};
   return D[k]}
-const RELS=[['gerencial','Resumo gerencial','Resultado, custos por categoria e resultado por lote'],['financeiro','Contas a pagar e receber','Títulos em aberto e saldo das contas'],['fluxo','Fluxo de caixa','Todas as baixas do período e conciliação'],['custos','Notas e custos','Cada nota e gasto do período'],['envios','Uva enviada','Cargas por lote, mercado e romaneio'],['pcs','Prestações de contas','PCs da Valexfruit com descontos'],['estoque','Estoque','Embalagens e insumos com saldo e mínimo'],['producao','Produção','Ranking e lançamentos das embaladeiras'],['pulverizacao','Pulverização','Aplicações, tratoristas e carência'],['completo','Relatório completo','Tudo acima num arquivo só']];
+const RELS=[['gerencial','Resumo gerencial','Resultado, custos por categoria e resultado por lote'],['financeiro','Contas a pagar e receber','Títulos em aberto e saldo das contas'],['fluxo','Fluxo de caixa','Todas as baixas do período e conciliação'],['custos','Notas e custos','Cada nota e gasto do período'],['envios','Entrada da fruta','Cargas por parcela, válvula, rastreabilidade e romaneio'],['pcs','Prestações de contas','PCs da Valexfruit com descontos'],['estoque','Estoque','Embalagens e insumos com saldo e mínimo'],['producao','Produção','Ranking e lançamentos das embaladeiras'],['pulverizacao','Pulverização','Aplicações, tratoristas e carência'],['completo','Relatório completo','Tudo acima num arquivo só']];
 const nomeArq=(t,ext)=>(t+' '+(ano==='todos'?'geral':ano)+' '+hoje()).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-')+'.'+ext;
 async function salvarArquivo(filename,blob){if(!dl){showBanner('Este navegador não permite baixar arquivos daqui. Abra o sistema no app ou no site do Claude.');return false}
   try{await dl.save({filename,data:blob});return true}catch(e){if(e.code!=='declined')showBanner('Não consegui gerar o arquivo ('+(e.code||e.message)+').');return false}}
@@ -1375,6 +1383,44 @@ async function camLigar(){if(CAM){camDesligar();focoLeitor();return}
   finally{delete b.dataset.busy}}
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&CAM)camDesligar()});
 dlg.addEventListener('close',()=>{if(ROM&&ROM._wait)setTimeout(()=>{if(!ROM)return;if(romSig()!==ROM._sig)romSync();else ROM._wait=''},60)});
+/* ---------- entrada da fruta ---------- */
+const FE={ini:'',fim:'',prod:'',tal:'',val:'',st:'',ras:''},ABERTO=new Set();
+function rastreio(o){const ano=String(o.data||hoje()).slice(2,4),dm=String(o.data||hoje()).slice(8,10)+String(o.data||hoje()).slice(5,7);
+  const m=String(o.valvula||'').match(/S(?:ETOR)?\s*-?\s*(\d+)/i);const t=S.talhoes.find(x=>x.id===o.talhao);
+  const set=m?'S'+m[1].padStart(2,'0'):(String(t?.nome||'').match(/\d+/)?'S'+String(t.nome).match(/\d+/)[0].padStart(2,'0'):'S00');
+  const cx=pBR(o.caixas),kg=pBR(o.kg);return['R',ano,set,dm,cx>0&&kg>0?(kg/cx).toFixed(2):''].filter(Boolean).join('-')}
+const entUsado=(e,semRom)=>!e.rastreabilidade?0:sum(S.romaneios.filter(r=>r.id!==semRom).flatMap(r=>r.itens||[]).filter(i=>String(i.rastreio||'').toUpperCase()===String(e.rastreabilidade).toUpperCase()),i=>+i.peso||0);
+const entSaldo=(e,semRom)=>(+e.kg||0)-entUsado(e,semRom);
+function entFiltro(){return S.envios.filter(e=>{const d=e.data||'';if(!FE.ini&&!FE.fim&&!inAno(d))return false;if(FE.ini&&d<FE.ini)return false;if(FE.fim&&d>FE.fim)return false;
+  if(FE.prod&&e.produtor!==FE.prod)return false;if(FE.tal&&e.talhao!==FE.tal)return false;if(FE.val&&e.valvula!==FE.val)return false;
+  const sd=entSaldo(e);if(FE.st==='saldo'&&!(sd>0.0001))return false;if(FE.st==='zerado'&&sd>0.0001)return false;
+  if(FE.ras&&!String(e.rastreabilidade||'').toUpperCase().includes(FE.ras.toUpperCase()))return false;return true})
+  .sort((a,b)=>String(b.data).localeCompare(String(a.data))||(+b.sequencia||0)-(+a.sequencia||0))}
+function entLista(){const rows=entFiltro(),P=paginar('ent',rows);const tkg=sum(rows,e=>+e.kg||0),tcx=sum(rows,e=>+e.caixas||0),tsd=sum(rows,e=>entSaldo(e));
+  const uniq=a=>[...new Set(a.filter(Boolean))].sort();
+  const sel=(id,l,opts,v)=>`<label>${l}<select id="${id}">${optsH([['','Todos'],...opts],v)}</select></label>`;
+  const filtros=`<div class="ent-f nf-opts"><label>Data início<input type="date" id="fe_ini" value="${esc(FE.ini)}"></label><label>Data fim<input type="date" id="fe_fim" value="${esc(FE.fim)}"></label>
+   ${sel('fe_prod','Produtor',uniq(S.envios.map(e=>e.produtor)).map(x=>[x,x]),FE.prod)}${sel('fe_tal','Parcela (latada)',S.talhoes.map(t=>[t.id,t.nome]),FE.tal)}
+   ${sel('fe_val','Válvula',uniq(S.envios.map(e=>e.valvula)).map(x=>[x,x]),FE.val)}${sel('fe_st','Status',[['saldo','Com saldo'],['zerado','Sem saldo']],FE.st)}
+   <label>Rastreabilidade<input id="fe_ras" value="${esc(FE.ras)}" placeholder="R-26-…"></label><div class="ent-go"><button type="button" class="btn" data-ent-go>Pesquisar</button>${Object.values(FE).some(Boolean)?'<button type="button" class="btn sm" data-ent-limpa>Limpar</button>':''}</div></div>`;
+  const tr=e=>{const sd=entSaldo(e),ab=ABERTO.has(e.id);return`<tr><td class="n">${esc(e.sequencia||'—')}${ex(e)}</td><td>${fd(e.data)}</td><td>${esc(e.tipo||'Caixa')}</td><td class="wrap">${esc(e.produtor||'—')}</td><td>${esc(e.atividade||'—')}</td><td>${esc(tNome(e.talhao))}</td><td class="wrap">${esc(e.valvula||'—')}</td><td class="mono">${esc(e.rastreabilidade||'—')}</td><td class="n">${int(e.caixas)}</td><td class="n">${num(+e.kg||0)}</td><td class="n${sd<-0.0001?' neg':''}">${num(sd)}</td>
+   <td class="n"><button type="button" class="ico" data-ent-det="${e.id}" aria-expanded="${ab}" title="Detalhes" aria-label="Detalhes">${ab?'−':'+'}</button></td><td class="n">${acoes('envios',e.id)}</td></tr>`
+   +(ab?`<tr class="det"><td colspan="13"><div class="det-g"><span><b>Variedade</b> ${esc(e.variedade||'—')}</span><span><b>Mercado</b> ${esc(e.mercado||'—')}</span><span><b>Semana</b> ${e.semana||semanaISO(e.data)||'—'}</span><span><b>Kg por caixa</b> ${+e.caixas?num(e.kg/e.caixas):'—'}</span><span><b>Embalagem</b> ${esc(e.embalagem||'—')}</span><span><b>Romaneio / ticket</b> ${esc(e.romaneio||'—')}</span><span><b>Usado em romaneios</b> ${num(entUsado(e))} kg</span>${e.obs?`<span><b>Obs.</b> ${esc(e.obs)}</span>`:''}</div></td></tr>`:'')};
+  return`<div class="sec-h"><div><h2>Entrada da Fruta</h2><p>Cada carga que entra no packing, por parcela e válvula. O saldo (kg) baixa quando a rastreabilidade é usada num romaneio.</p></div><div class="btns"><button class="btn ok-btn" data-ent-pdf>Imprimir</button>${canWrite?'<button class="btn pri" data-new="envios">+ Novo</button>':''}</div></div>
+  ${filtros}<div class="kpis">${kpi('Entradas',rows.length)}${kpi('Quantidade',int(tcx),'caixas')}${kpi('Quantidade (kg)',num(tkg))}${kpi('Saldo (kg)',num(tsd))}</div>
+  ${rows.length?`<div class="tbl"><table class="ent-t"><thead><tr><th class="n">Seq.</th><th>Emissão</th><th>Tipo</th><th>Produtor</th><th>Atividade</th><th>Parcela</th><th>Válvula</th><th>Rastreabilidade</th><th class="n">Quantidade</th><th class="n">Qtd. (kg)</th><th class="n">Saldo (kg)</th><th class="n">Det.</th><th class="n">Ações</th></tr></thead><tbody>${P.vis.map(tr).join('')}</tbody>
+   <tfoot><tr><td>Total</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="n">${int(tcx)}</td><td class="n">${num(tkg)}</td><td class="n">${num(tsd)}</td><td></td><td></td></tr></tfoot></table></div>${P.html}`
+  :`<div class="tbl"><div class="empty">Nenhuma entrada encontrada.${canWrite?' <button class="btn sm" data-new="envios">Lançar a primeira</button>':''}</div></div>`}`}
+function entLer(){const g=id=>(document.getElementById(id)||{}).value||'';Object.assign(FE,{ini:g('fe_ini'),fim:g('fe_fim'),prod:g('fe_prod'),tal:g('fe_tal'),val:g('fe_val'),st:g('fe_st'),ras:g('fe_ras').trim()});(PG.ent||{}).page=0}
+async function entPDF(){const rows=entFiltro();const f=[FE.ini&&'de '+fd(FE.ini),FE.fim&&'até '+fd(FE.fim),FE.prod,FE.tal&&tNome(FE.tal),FE.val,FE.st==='saldo'?'com saldo':FE.st==='zerado'?'sem saldo':'',FE.ras].filter(Boolean).join(' · ');
+  await gerarPDF({titulo:'Entrada da Fruta',kpis:[['Filtros',f||'Nenhum'],['Entradas',String(rows.length)],['Quantidade',int(sum(rows,e=>+e.caixas||0))+' caixas'],['Quantidade (kg)',num(sum(rows,e=>+e.kg||0))],['Saldo (kg)',num(sum(rows,e=>entSaldo(e)))]],
+   secoes:[{titulo:'Entradas',cols:[C('Seq.'),C('Emissão','date'),C('Tipo'),C('Produtor'),C('Atividade'),C('Parcela'),C('Válvula'),C('Rastreabilidade'),C('Quantidade','int'),C('Qtd. (kg)','num'),C('Saldo (kg)','num')],
+    rows:rows.map(e=>[e.sequencia||'',e.data,e.tipo||'Caixa',e.produtor||'',e.atividade||'',tNome(e.talhao),e.valvula||'',e.rastreabilidade||'',+e.caixas||0,+e.kg||0,entSaldo(e)])}]})}
+function entClick(t){if(t.hasAttribute('data-ent-go')){entLer();render();return true}
+  if(t.hasAttribute('data-ent-limpa')){Object.keys(FE).forEach(k=>FE[k]='');render();return true}
+  if(t.dataset.entDet){const id=t.dataset.entDet;ABERTO.has(id)?ABERTO.delete(id):ABERTO.add(id);render();return true}
+  if(t.hasAttribute('data-ent-pdf')){entPDF().catch(x=>showBanner('Não consegui gerar o PDF: '+(x.message||x.code)));return true}return false}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='fe_ras'){e.preventDefault();entLer();render()}});
 /* ---------- romaneio, clientes e deduções ---------- */
 let romTab='lista',ROM=null;const BUSCA={rom:'',cli:'',ded:'',atv:''},PG={};
 const ICO={edit:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
@@ -1391,7 +1437,7 @@ const fmtDoc=d=>d.length===11?d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3
 const romCx=r=>sum(r.itens||[],i=>r.tipo==='Caixa'?nv(i.qtd):nv(i.caixas));
 function dedTotal(d,prod,cx){const u=nv(d.unit);return d.forma==='Valor fixo'?u:d.forma==='% dos produtos'?prod*u/100:nv(d.qtd)*u}
 function romTot(r){const prod=sum(r.itens||[],i=>nv(i.qtd)*nv(i.unit));const cx=romCx(r);const ded=sum(r.deducoes||[],d=>dedTotal(d,prod,cx));return{prod,cx,ded,total:prod-ded}}
-const romSig=()=>S.clientes.length+'|'+S.deducoes.length;
+const romSig=()=>S.clientes.length+'|'+S.deducoes.length+'|'+S.envios.length;
 function paginar(k,rows){const p=PG[k]||(PG[k]={size:10,page:0});const size=p.size||rows.length||1;const pages=Math.max(1,Math.ceil(rows.length/size));if(p.page>=pages)p.page=pages-1;if(p.page<0)p.page=0;
   const vis=p.size?rows.slice(p.page*size,p.page*size+size):rows;
   const html=`<div class="pager"><label>Exibir <select data-pgsize="${k}" aria-label="Itens por página">${optsH([['10','10 por página'],['25','25 por página'],['50','50 por página'],['0','Todos']],String(p.size))}</select></label><span class="note">${rows.length?`${p.size?p.page*size+1:1} a ${p.size?Math.min(rows.length,p.page*size+size):rows.length} de ${rows.length}`:'Nenhum registro'}</span><span class="btns"><button type="button" class="btn sm" data-pg="${k}|-1"${p.page<=0?' disabled':''}>Anterior</button><button type="button" class="btn sm" data-pg="${k}|1"${p.page>=pages-1?' disabled':''}>Próxima</button></span></div>`;
@@ -1422,7 +1468,7 @@ function atvLista(){const q=BUSCA.atv.toLowerCase();const rows=[...S.atividades]
   +(!S.atividades.length&&canWrite?`<div class="banner">Nenhuma atividade cadastrada. <button class="btn sm" data-atv-padrao>Carregar COLHEITA e EMBALAGEM</button></div>`:'')
   +busca('atv','Pesquisar pelo nome')+(rows.length?`<div class="tbl"><table><thead><tr><th>Nome</th><th class="n">Ações</th></tr></thead><tbody>${P.vis.map(r=>`<tr><td>${esc(r.nome)}${r.obs?`<br><span class="note">${esc(r.obs)}</span>`:''}</td><td class="n">${acoes('atividades',r.id)}</td></tr>`).join('')}</tbody></table></div>${P.html}`:`<div class="tbl"><div class="empty">Nenhuma atividade${q?' encontrada':''}.</div></div>`)}
 async function atvPadrao(b){b.disabled=true;for(const n of ATV_PADRAO){if(!S.atividades.some(d=>String(d.nome).toUpperCase()===n))await put('atividades',{id:null,nome:n})}showBanner('Atividades COLHEITA e EMBALAGEM cadastradas.')}
-function abrirRom(rec){ROM=rec?JSON.parse(JSON.stringify(rec)):{numero:'',dataEmissao:hoje(),tipo:'Pallet',cliente:'',pedido:'',obs:'',itens:[{produto:'',talhao:'',qtd:'',caixas:'',peso:'',unit:''}],deducoes:[],gerarReceber:'Não',vencimento:'',usuarioInclusao:sessao?.nome||'',dataInclusao:new Date().toISOString()};
+function abrirRom(rec){ROM=rec?JSON.parse(JSON.stringify(rec)):{numero:'',dataEmissao:hoje(),tipo:'Pallet',cliente:'',pedido:'',obs:'',itens:[{produto:'',rastreio:'',talhao:'',qtd:'',caixas:'',peso:'',unit:''}],deducoes:[],gerarReceber:'Não',vencimento:'',usuarioInclusao:sessao?.nome||'',dataInclusao:new Date().toISOString()};
   (ROM.itens||[]).forEach(i=>['qtd','caixas','peso','unit'].forEach(k=>i[k]=vIn(i[k])));(ROM.deducoes||[]).forEach(d=>['qtd','unit'].forEach(k=>d[k]=vIn(d[k])));
   ROM._aba='geral';ROM._sig=romSig();impF.dataset.mode='rom';const s=document.getElementById('impS');s.textContent='Salvar';s.disabled=!canWrite;s.hidden=!canWrite;
   document.getElementById('impErr').textContent='';renderRom();imp.showModal()}
@@ -1442,8 +1488,8 @@ function renderRom(){const r=ROM,T=romTot(r),ro=canWrite?'':' disabled',un=r.tip
      <h3>Dados do usuário</h3><div class="nf-opts"><label>Usuário inclusão<input value="${esc(r.usuarioInclusao||'')}" disabled></label><label>Data inclusão<input value="${hr?fd(hr.toISOString().slice(0,10)):''}" disabled></label><label>Hora inclusão<input value="${hr?hr.toLocaleTimeString('pt-BR'):''}" disabled></label></div>`}
   else if(r._aba==='prod'){const tal=talOpts('—');const prodL=[...new Set([...S.talhoes.map(t=>t.variedade),'EXTRA','LINA','VITACE','PREMIUM','LININHA',...S.romaneios.flatMap(x=>(x.itens||[]).map(i=>i.produto))].filter(Boolean))];
     const pal=r.tipo==='Pallet';
-    h+=`<datalist id="romProdL">${prodL.map(p=>`<option value="${esc(p)}">`).join('')}</datalist><div class="tbl"><table><thead><tr><th>Produto</th><th>Lote / latada</th><th class="n">${un}</th>${pal?'<th class="n">Caixas</th>':''}<th class="n">Peso (kg)</th><th class="n">R$ por ${pal?'pallet':'caixa'}</th><th class="n">Total</th><th></th></tr></thead><tbody>${r.itens.map((i,n)=>{const a=`data-rs="itens" data-ri="${n}"`;return`<tr><td><input class="cell-in" ${a} data-rk="produto" list="romProdL" value="${esc(i.produto)}" aria-label="Produto"${ro}></td><td><select class="cell-in" ${a} data-rk="talhao" aria-label="Lote"${ro}>${optsH(tal,i.talhao)}</select></td><td class="n"><input class="cell-in num" ${a} data-rk="qtd" inputmode="decimal" value="${esc(i.qtd)}" aria-label="${un}"${ro}></td>${pal?`<td class="n"><input class="cell-in num" ${a} data-rk="caixas" inputmode="decimal" value="${esc(i.caixas)}" aria-label="Caixas"${ro}></td>`:''}<td class="n"><input class="cell-in num" ${a} data-rk="peso" inputmode="decimal" value="${esc(i.peso)}" aria-label="Peso"${ro}></td><td class="n"><input class="cell-in num" ${a} data-rk="unit" inputmode="decimal" value="${esc(i.unit)}" aria-label="Valor unitário"${ro}></td><td class="n" id="romIt${n}">${brl(nv(i.qtd)*nv(i.unit))}</td><td>${canWrite?`<button type="button" class="ico del" data-rom-rm="itens|${n}" title="Remover" aria-label="Remover produto">${ICO.del}</button>`:''}</td></tr>`}).join('')}</tbody>
-     <tfoot><tr><td>Total</td><td></td><td class="n" id="romQtd">${num(sum(r.itens,i=>nv(i.qtd)))}</td>${pal?`<td class="n" id="romCx">${int(T.cx)}</td>`:''}<td class="n" id="romPeso">${num(sum(r.itens,i=>nv(i.peso)))}</td><td></td><td class="n" id="romProd">${brl(T.prod)}</td><td></td></tr></tfoot></table></div>${canWrite?'<div class="btns"><button type="button" class="btn" data-rom-add="itens">+ Adicionar produto</button></div>':''}`}
+    h+=`<datalist id="romRasL">${S.envios.filter(e=>e.rastreabilidade&&entSaldo(e,r.id)>0.0001).sort(byDate('data')).map(e=>`<option value="${esc(e.rastreabilidade)}">${esc(tNome(e.talhao))} · saldo ${num(entSaldo(e,r.id))} kg</option>`).join('')}</datalist><datalist id="romProdL">${prodL.map(p=>`<option value="${esc(p)}">`).join('')}</datalist><div class="tbl"><table><thead><tr><th>Produto</th><th>Rastreabilidade</th><th>Lote / latada</th><th class="n">${un}</th>${pal?'<th class="n">Caixas</th>':''}<th class="n">Peso (kg)</th><th class="n">R$ por ${pal?'pallet':'caixa'}</th><th class="n">Total</th><th></th></tr></thead><tbody>${r.itens.map((i,n)=>{const a=`data-rs="itens" data-ri="${n}"`;return`<tr><td><input class="cell-in" ${a} data-rk="produto" list="romProdL" value="${esc(i.produto)}" aria-label="Produto"${ro}></td><td><input class="cell-in" ${a} data-rk="rastreio" list="romRasL" value="${esc(i.rastreio||'')}" aria-label="Rastreabilidade" placeholder="R-…"${ro}></td><td><select class="cell-in" ${a} data-rk="talhao" aria-label="Lote"${ro}>${optsH(tal,i.talhao)}</select></td><td class="n"><input class="cell-in num" ${a} data-rk="qtd" inputmode="decimal" value="${esc(i.qtd)}" aria-label="${un}"${ro}></td>${pal?`<td class="n"><input class="cell-in num" ${a} data-rk="caixas" inputmode="decimal" value="${esc(i.caixas)}" aria-label="Caixas"${ro}></td>`:''}<td class="n"><input class="cell-in num" ${a} data-rk="peso" inputmode="decimal" value="${esc(i.peso)}" aria-label="Peso"${ro}></td><td class="n"><input class="cell-in num" ${a} data-rk="unit" inputmode="decimal" value="${esc(i.unit)}" aria-label="Valor unitário"${ro}></td><td class="n" id="romIt${n}">${brl(nv(i.qtd)*nv(i.unit))}</td><td>${canWrite?`<button type="button" class="ico del" data-rom-rm="itens|${n}" title="Remover" aria-label="Remover produto">${ICO.del}</button>`:''}</td></tr>`}).join('')}</tbody>
+     <tfoot><tr><td>Total</td><td></td><td></td><td class="n" id="romQtd">${num(sum(r.itens,i=>nv(i.qtd)))}</td>${pal?`<td class="n" id="romCx">${int(T.cx)}</td>`:''}<td class="n" id="romPeso">${num(sum(r.itens,i=>nv(i.peso)))}</td><td></td><td class="n" id="romProd">${brl(T.prod)}</td><td></td></tr></tfoot></table></div>${canWrite?'<div class="btns"><button type="button" class="btn" data-rom-add="itens">+ Adicionar produto</button></div>':''}`}
   else{const dl=[['','— escolha a dedução —'],...[...S.deducoes].sort((a,b)=>String(a.nome).localeCompare(String(b.nome))).map(d=>[d.id,d.nome+(d.tipo&&d.tipo!=='Venda'?' ('+d.tipo+')':'')])];
     h+=`<div class="tbl"><table><thead><tr><th>Dedução</th><th>Cálculo</th><th class="n">Caixas</th><th class="n">Valor (R$ ou %)</th><th class="n">Total</th><th></th></tr></thead><tbody>${r.deducoes.length?r.deducoes.map((d,n)=>{const a=`data-rs="deducoes" data-ri="${n}"`;return`<tr><td><select class="cell-in" ${a} data-rk="ded" aria-label="Dedução"${ro}>${optsH(dl,d.ded)}</select></td><td><select class="cell-in" ${a} data-rk="forma" aria-label="Cálculo"${ro}>${optsH(['Por caixa','Valor fixo','% dos produtos'],d.forma||'Por caixa')}</select></td><td class="n"><input class="cell-in num" ${a} data-rk="qtd" inputmode="decimal" value="${esc(d.qtd)}" aria-label="Caixas"${d.forma&&d.forma!=='Por caixa'?' disabled':ro}></td><td class="n"><input class="cell-in num" ${a} data-rk="unit" inputmode="decimal" value="${esc(d.unit)}" aria-label="Valor"${ro}></td><td class="n" id="romDd${n}">${brl(dedTotal(d,T.prod,T.cx))}</td><td>${canWrite?`<button type="button" class="ico del" data-rom-rm="deducoes|${n}" title="Remover" aria-label="Remover dedução">${ICO.del}</button>`:''}</td></tr>`}).join(''):`<tr><td colspan="6" class="empty">Nenhuma dedução neste romaneio.</td></tr>`}</tbody>
      <tfoot><tr><td>Total de deduções</td><td></td><td></td><td></td><td class="n" id="romDed">${brl(T.ded)}</td><td></td></tr></tfoot></table></div>
@@ -1458,14 +1504,15 @@ function romAtualiza(){const r=ROM,T=romTot(r),set=(id,v)=>{const e=document.get
 function romInput(e){if(impF.dataset.mode!=='rom'||!ROM)return;const el=e.target,k=el.dataset&&el.dataset.rk;if(!k)return;
   const tgt=el.dataset.rs?ROM[el.dataset.rs][+el.dataset.ri]:ROM;if(!tgt)return;tgt[k]=el.value;
   if(e.type==='change'&&k==='ded'){const d=S.deducoes.find(x=>x.id===el.value);if(d){tgt.nome=d.nome;tgt.forma=d.forma||'Por caixa';tgt.unit=vIn(d.valorPadrao||'');if(tgt.forma==='Por caixa')tgt.qtd=vIn(romTot(ROM).cx)}renderRom();return}
+  if(e.type==='change'&&k==='rastreio'){const en=S.envios.find(x=>String(x.rastreabilidade).toUpperCase()===String(el.value).trim().toUpperCase());if(en){tgt.rastreio=en.rastreabilidade;if(!tgt.talhao)tgt.talhao=en.talhao;if(!String(tgt.produto||'').trim()&&en.variedade)tgt.produto=en.variedade;renderRom();return}}
   if(e.type==='change'&&(k==='tipo'||k==='forma')){if(k==='forma'&&el.value==='Por caixa'&&!nv(tgt.qtd))tgt.qtd=vIn(romTot(ROM).cx);renderRom();return}
   romAtualiza()}
 impB.addEventListener('input',romInput);impB.addEventListener('change',romInput);
 impB.addEventListener('click',e=>{if(impF.dataset.mode!=='rom'||!ROM)return;const b=e.target.closest('[data-romaba],[data-rom-add],[data-rom-rm],[data-rom-newcli],[data-rom-newded]');if(!b)return;
   if(b.dataset.romaba){ROM._aba=b.dataset.romaba;renderRom();return}
-  if(b.dataset.romAdd==='itens'){ROM.itens.push({produto:'',talhao:'',qtd:'',caixas:'',peso:'',unit:''});renderRom();return}
+  if(b.dataset.romAdd==='itens'){ROM.itens.push({produto:'',rastreio:'',talhao:'',qtd:'',caixas:'',peso:'',unit:''});renderRom();return}
   if(b.dataset.romAdd==='deducoes'){ROM.deducoes.push({ded:'',nome:'',forma:'Por caixa',qtd:vIn(romTot(ROM).cx),unit:''});renderRom();return}
-  if(b.dataset.romRm){const[s,n]=b.dataset.romRm.split('|');ROM[s].splice(+n,1);if(s==='itens'&&!ROM.itens.length)ROM.itens.push({produto:'',talhao:'',qtd:'',caixas:'',peso:'',unit:''});renderRom();return}
+  if(b.dataset.romRm){const[s,n]=b.dataset.romRm.split('|');ROM[s].splice(+n,1);if(s==='itens'&&!ROM.itens.length)ROM.itens.push({produto:'',rastreio:'',talhao:'',qtd:'',caixas:'',peso:'',unit:''});renderRom();return}
   if(b.hasAttribute('data-rom-newcli')){ROM._wait='cli';openForm('clientes',null,{tipoPessoa:'PJ',categoria:'Cooperativa'});return}
   if(b.hasAttribute('data-rom-newded')){ROM._wait='ded';openForm('deducoes',null,{tipo:'Venda',forma:'Por caixa'});return}});
 function romSync(){if(!ROM)return;const novo=c=>[...S[c]].sort((a,b)=>String(b.em||'').localeCompare(String(a.em||'')))[0];
@@ -1475,7 +1522,7 @@ function romSync(){if(!ROM)return;const novo=c=>[...S[c]].sort((a,b)=>String(b.e
 async function salvarRom(err){const r=ROM;const vai=(a,m)=>{err.textContent=m;r._aba=a;renderRom();return false};
   if(!r.dataEmissao)return vai('geral','Informe a data de emissão.');
   if(!r.cliente)return vai('geral','Escolha o cliente / cooperativa.');
-  const itens=r.itens.filter(i=>String(i.produto||'').trim()||nv(i.qtd)||nv(i.unit)).map(i=>({produto:String(i.produto||'').trim(),talhao:i.talhao||'',qtd:nv(i.qtd),caixas:r.tipo==='Caixa'?nv(i.qtd):nv(i.caixas),peso:nv(i.peso),unit:nv(i.unit)}));
+  const itens=r.itens.filter(i=>String(i.produto||'').trim()||nv(i.qtd)||nv(i.unit)).map(i=>({produto:String(i.produto||'').trim(),rastreio:String(i.rastreio||'').trim().toUpperCase(),talhao:i.talhao||'',qtd:nv(i.qtd),caixas:r.tipo==='Caixa'?nv(i.qtd):nv(i.caixas),peso:nv(i.peso),unit:nv(i.unit)}));
   if(!itens.length)return vai('prod','Lance pelo menos um produto.');
   if(itens.some(i=>!i.produto))return vai('prod','Informe o nome do produto em todas as linhas.');
   itens.forEach(i=>i.total=i.qtd*i.unit);const prod=sum(itens,i=>i.total),cx=romCx({tipo:r.tipo,itens});
@@ -1490,14 +1537,15 @@ async function salvarRom(err){const r=ROM;const vai=(a,m)=>{err.textContent=m;r.
   await put('romaneios',doc);ROM=null;showBanner('Romaneio nº '+numero+' salvo: '+brl(prod-totDed)+'.');return true}
 async function romPDF(id){const r=S.romaneios.find(x=>x.id===id);if(!r)return;const T=romTot(r),pal=r.tipo!=='Caixa';
   await gerarPDF({titulo:'Romaneio nº '+r.numero,semPeriodo:1,kpis:[['Cliente / cooperativa',(r.clienteNome||'')+(r.clienteDoc?' · '+r.clienteDoc:'')],['Data de emissão',fd(r.dataEmissao)],['Tipo',r.tipo],['Nº do pedido',r.pedido||'—'],['Total de produtos',brl(T.prod)],['Total de deduções',brl(T.ded)],['Valor total',brl(T.total)],...(r.obs?[['Observação',r.obs]]:[])],
-    secoes:[{titulo:'Produtos do romaneio',cols:[C('Produto'),C('Lote / latada'),C(pal?'Pallets':'Caixas','num'),...(pal?[C('Caixas','int')]:[]),C('Peso (kg)','num'),C('R$ por '+(pal?'pallet':'caixa'),'brl'),C('Total','brl')],
-      rows:(r.itens||[]).map(i=>[i.produto,i.talhao?tNome(i.talhao):'',nv(i.qtd),...(pal?[nv(i.caixas)]:[]),nv(i.peso),nv(i.unit),nv(i.qtd)*nv(i.unit)])},
+    secoes:[{titulo:'Produtos do romaneio',cols:[C('Produto'),C('Rastreabilidade'),C('Lote / latada'),C(pal?'Pallets':'Caixas','num'),...(pal?[C('Caixas','int')]:[]),C('Peso (kg)','num'),C('R$ por '+(pal?'pallet':'caixa'),'brl'),C('Total','brl')],
+      rows:(r.itens||[]).map(i=>[i.produto,i.rastreio||'',i.talhao?tNome(i.talhao):'',nv(i.qtd),...(pal?[nv(i.caixas)]:[]),nv(i.peso),nv(i.unit),nv(i.qtd)*nv(i.unit)])},
      {titulo:'Deduções do romaneio',cols:[C('Dedução'),C('Cálculo'),C('Caixas','num'),C('R$ por unidade ou %','num'),C('Total','brl')],rows:(r.deducoes||[]).map(d=>[d.nome,d.forma,d.forma==='Por caixa'?nv(d.qtd):'',nv(d.unit),dedTotal(d,T.prod,T.cx)])}]})}
 async function cadPDF(col){if(col==='atividades'){await gerarPDF({titulo:'Atividade do Packing',semPeriodo:1,kpis:[['Grupo',CFG.packingNome||'PACKING PAI E FILHO']],secoes:[{titulo:'Atividades cadastradas',cols:[C('Nome'),C('Observação')],rows:[...S.atividades].sort((a,b)=>String(a.nome).localeCompare(String(b.nome))).map(r=>[r.nome,r.obs||''])}]});return}const ded=col==='deducoes';const rows=[...S[col]].sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));
   await gerarPDF(ded?{titulo:'Deduções Compra/Venda',semPeriodo:1,secoes:[{titulo:'Deduções cadastradas',cols:[C('Nome'),C('Tipo'),C('Cálculo padrão'),C('R$ por unidade ou %','num')],rows:rows.map(r=>[r.nome,r.tipo||'Venda',r.forma||'Por caixa',nv(r.valorPadrao)])}]}
     :{titulo:'Clientes / Cooperativas',semPeriodo:1,secoes:[{titulo:'Cadastro',cols:[C('Nome / Razão social'),C('Tipo'),C('CPF / CNPJ'),C('Telefone'),C('Município / UF')],rows:rows.map(r=>[r.nome,r.tipoPessoa==='PF'?'Física':'Jurídica',r.doc||'',r.telefone||'',[r.municipio,r.uf].filter(Boolean).join(' / ')])}]})}
 async function dedPadrao(b){b.disabled=true;for(const n of DED_PADRAO){if(!S.deducoes.some(d=>String(d.nome).toUpperCase()===n))await put('deducoes',{id:null,nome:n,tipo:'Venda',forma:'Por caixa',valorPadrao:0})}showBanner('Deduções padrão cadastradas. Ajuste o cálculo e o valor de cada uma pelo lápis.')}
 function romClick(t,e){
+  if(entClick(t))return true;
   if(t.dataset.romtab){romTab=t.dataset.romtab;render();return true}
   if(t.hasAttribute('data-rom-novo')){abrirRom(null);return true}
   if(t.dataset.romPdf){romPDF(t.dataset.romPdf).catch(x=>showBanner('Não consegui gerar o PDF: '+(x.message||x.code)));return true}
