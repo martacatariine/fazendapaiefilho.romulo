@@ -27,6 +27,14 @@ Sistema de gestão da fazenda: uva enviada à cooperativa, prestação de contas
 5. No **GitHub**, ative **Settings → Pages → Deploy from a branch → main / (root)**.
 6. Abra o endereço. Na primeira vez, o sistema pede para criar o **primeiro administrador**. Isso só acontece uma vez.
 
+## Romaneios
+
+Na aba **Romaneios** ficam três telas:
+
+- **Romaneios:** cada carga com *Geral* (data de emissão, tipo Pallet ou Caixa, cliente/cooperativa, pedido, observação e quem lançou), *Produtos do romaneio* e *Deduções do romaneio*. O **Valor total** já sai com as deduções descontadas. Dá para imprimir cada romaneio em PDF e, se quiser, lançar o valor como conta a receber no Financeiro.
+- **Clientes / Cooperativas:** cadastro com importação da **CNH digital** (pessoa física) ou do **Cartão CNPJ** (pessoa jurídica) em PDF, e busca do CNPJ na Receita.
+- **Deduções Compra/Venda:** cadastro das deduções (Alimentação, Batedor, Caixa Extra, Caixa Lina, Caixa Valex, Caixa Vitace, Colheita, Embalação, Fiscal Colheita, Fiscal de Embalação e outras), com cálculo por caixa, valor fixo ou % dos produtos.
+
 ## Perfis
 
 - **Administrador:** lança, edita, exclui e cadastra usuários.

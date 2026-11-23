@@ -1,8 +1,8 @@
 /* Guarda o aplicativo no aparelho para abrir mesmo sem internet.
    Os dados ficam no cache próprio do Firestore; aqui só vão as telas e bibliotecas. */
-const VERSAO = 'fazenda-v3';
+const VERSAO = 'fazenda-v4';
 const BASE = ['./', './index.html', './config.js', './manifest.webmanifest', './logo.webp', './icons/icon-192.png', './icons/icon-512.png'];
-const LIBS = ['www.gstatic.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+const LIBS = ['www.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSAO).then(c => c.addAll(BASE)).then(() => self.skipWaiting()));
